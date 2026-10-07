@@ -6,7 +6,8 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 
@@ -50,7 +51,7 @@ O **FitFlow** é uma aplicação de acompanhamento de fitness. Esta API é o bac
 
 | Funcionalidade        | Descrição                                               |
 | --------------------- | ------------------------------------------------------- |
-| **Autenticação**      | Criar conta e iniciar sessão via Supabase Auth (JWT)    |
+| **Autenticação**      | Criar conta e iniciar sessão com tokens JWT             |
 | **Exercícios**        | Consultar um catálogo de exercícios                     |
 | **Treinos**           | Criar, editar e registar treinos                        |
 | **Progresso**         | Acompanhar a evolução ao longo do tempo                 |
@@ -61,9 +62,9 @@ O **FitFlow** é uma aplicação de acompanhamento de fitness. Esta API é o bac
 
 ```mermaid
 flowchart LR
-    Client["Cliente<br/>(Web / Mobile)"] -->|HTTP / JSON| API["FitFlow API<br/>FastAPI + Uvicorn"]
-    API -->|Auth JWT| Auth["Supabase Auth"]
-    API -->|Queries| DB[("Supabase<br/>PostgreSQL")]
+    Client["Cliente<br/>(Web / Mobile)"] -->|HTTP / JSON + JWT| API["FitFlow API<br/>FastAPI + Uvicorn"]
+    API -->|SQLAlchemy async| DB[("PostgreSQL")]
+    Alembic["Alembic<br/>(migrações)"] -.->|esquema| DB
 ```
 
 ---
@@ -74,7 +75,10 @@ flowchart LR
 | ------------------------------ | ---------------------------------------- |
 | Linguagem & Framework          | Python 3.11+, FastAPI                    |
 | Servidor ASGI                  | Uvicorn                                  |
-| Autenticação & Base de Dados   | Supabase (PostgreSQL / GoTrue JWT)       |
+| Base de Dados                  | PostgreSQL 16                            |
+| ORM & Driver                   | SQLAlchemy 2.0 (async), asyncpg          |
+| Migrações                      | Alembic                                  |
+| Autenticação                   | JWT (PyJWT), hashing com Argon2          |
 | Validação de Dados             | Pydantic, pydantic-settings              |
 | Testes                         | Pytest & HTTPX                           |
 | Documentação                   | OpenAPI (Swagger UI & ReDoc)             |
@@ -96,10 +100,13 @@ fitflow-api/
 │   │   └── workouts.py   #   Gestão de treinos
 │   ├── core/
 │   │   ├── config.py     # Configurações globais (lidas do .env)
-│   │   └── supabase.py   # Cliente Supabase
+│   │   ├── database.py   # Engine e sessões SQLAlchemy
+│   │   └── security.py   # Hashing de passwords e tokens JWT
+│   ├── models/           # Modelos SQLAlchemy (tabelas)
 │   ├── schemas/          # Schemas de validação de dados (Pydantic)
 │   ├── main.py           # Ponto de entrada do FastAPI
 │   └── seed.py           # Script de povoamento inicial de exercícios
+├── alembic/              # Migrações da base de dados
 ├── tests/                # Testes automatizados com Pytest
 ├── k8s/                  # Manifestos para Kubernetes (Deployment e Service)
 ├── Dockerfile            # Imagem Docker da aplicação
@@ -118,8 +125,7 @@ fitflow-api/
 
 - [Python 3.11+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/)
-- Um projeto [Supabase](https://supabase.com) (o plano gratuito é suficiente)
-- [Docker & Docker Compose](https://docs.docker.com/get-docker/) _(opcional)_
+- [Docker & Docker Compose](https://docs.docker.com/get-docker/) (para correr o PostgreSQL), ou um [PostgreSQL 16](https://www.postgresql.org/download/) instalado localmente
 
 ### Instalação
 
@@ -147,7 +153,20 @@ pip install -r requirements.txt
 
 Cria um ficheiro `.env` na raiz do projeto (ver [Variáveis de Ambiente](#variáveis-de-ambiente)).
 
-**5. Iniciar o servidor**
+**5. Iniciar a base de dados e aplicar as migrações**
+
+```bash
+docker-compose up -d db
+alembic upgrade head
+```
+
+**6. (Opcional) Povoar o catálogo de exercícios**
+
+```bash
+python -m app.seed
+```
+
+**7. Iniciar o servidor**
 
 ```bash
 uvicorn app.main:app --reload
@@ -167,16 +186,22 @@ curl http://127.0.0.1:8000/health
 
 ## Variáveis de Ambiente
 
-| Variável       | Descrição                                    | Exemplo                           |
-| -------------- | -------------------------------------------- | --------------------------------- |
-| `SUPABASE_URL` | URL do projeto Supabase                      | `https://seu-projeto.supabase.co` |
-| `SUPABASE_KEY` | Chave pública (anon key) do projeto Supabase | `sua-anon-key-do-supabase`        |
-
-Ambos os valores encontram-se no painel do Supabase, em **Project Settings → API**.
+| Variável                      | Descrição                                   | Exemplo                                                        |
+| ----------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| `DATABASE_URL`                | Ligação ao PostgreSQL (driver asyncpg)      | `postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow`  |
+| `JWT_SECRET`                  | Chave secreta para assinar os tokens JWT    | `uma-string-longa-e-aleatoria`                                 |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Validade do token de acesso, em minutos     | `30`                                                           |
 
 ```env
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_KEY=sua-anon-key-do-supabase
+DATABASE_URL=postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow
+JWT_SECRET=uma-string-longa-e-aleatoria
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+Para gerar um `JWT_SECRET` seguro:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
 > [!WARNING]
@@ -211,7 +236,7 @@ Com o servidor em execução, a documentação é gerada automaticamente pelo Fa
 
 ## Executar com Docker
 
-Com o ficheiro `.env` configurado:
+Com o ficheiro `.env` configurado, sobe a API e o PostgreSQL juntos:
 
 ```bash
 docker-compose up --build
@@ -243,7 +268,7 @@ O plano completo — como as tecnologias interagem, o ciclo de um pedido, o mode
 
 | Fase | Objetivo                                         | Estado                                                                        |
 | :--: | ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| 1    | Fundação (FastAPI, configuração, cliente Supabase) | ![](https://img.shields.io/badge/-em%20progresso-orange?style=flat-square) |
+| 1    | Fundação (configuração, PostgreSQL, Alembic)     | ![](https://img.shields.io/badge/-em%20progresso-orange?style=flat-square)    |
 | 2    | Autenticação (registo, login, JWT)               | ![](https://img.shields.io/badge/-planeado-lightgrey?style=flat-square)       |
 | 3    | Catálogo de exercícios e seed                    | ![](https://img.shields.io/badge/-planeado-lightgrey?style=flat-square)       |
 | 4    | Gestão de treinos (CRUD)                         | ![](https://img.shields.io/badge/-planeado-lightgrey?style=flat-square)       |

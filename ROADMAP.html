@@ -242,9 +242,9 @@
     <div class="progress-card">
       <div class="progress-head">
         <strong>Fase 1 de 7 em progresso</strong>
-        <span>2 de 32 tarefas concluídas</span>
+        <span>2 de 38 tarefas concluídas</span>
       </div>
-      <div class="bar"><div style="width: 6%"></div></div>
+      <div class="bar"><div style="width: 5%"></div></div>
     </div>
 
     <div class="note">É um plano vivo: rotas, tabelas e fases podem mudar à medida que o projeto evolui.</div>
@@ -252,20 +252,17 @@
 
   <section id="visao-geral">
     <h2>Visão geral</h2>
-    <p class="section-lead">A API é uma camada fina entre o cliente e o Supabase: valida os dados, aplica as regras de negócio e devolve respostas consistentes. A autenticação e o armazenamento ficam a cargo do Supabase.</p>
+    <p class="section-lead">A API é dona de tudo: valida os dados, autentica os utilizadores com JWT emitidos por ela própria e guarda a informação num PostgreSQL acedido via SQLAlchemy. O esquema da base de dados evolui através de migrações Alembic versionadas no repositório.</p>
     <div class="card diagram">
 <pre class="mermaid">
 flowchart LR
     Client["Cliente<br/>(Web / Mobile)"] -->|HTTP + JWT| API
-    subgraph K8s["Kubernetes / Docker"]
+    subgraph Stack["Docker Compose / Kubernetes"]
         API["FitFlow API<br/>FastAPI + Uvicorn"]
+        DB[("PostgreSQL 16")]
     end
-    subgraph Supabase
-        Auth["Supabase Auth<br/>(GoTrue)"]
-        DB[("PostgreSQL<br/>+ Row Level Security")]
-    end
-    API -->|registo / login / validar token| Auth
-    API -->|consultas| DB
+    API -->|"SQLAlchemy async (asyncpg)"| DB
+    Alembic["Alembic<br/>migrações"] -.->|cria e altera tabelas| DB
 </pre>
     </div>
   </section>
@@ -278,10 +275,12 @@ flowchart LR
       <div class="card tech"><h3>Uvicorn</h3><div class="where mono">Arranque / Dockerfile</div><p>Servidor ASGI que executa a aplicação.</p></div>
       <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Valida os dados de entrada e formata as respostas.</p></div>
       <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Lê e valida as variáveis de ambiente do ficheiro <code>.env</code>.</p></div>
-      <div class="card tech"><h3>Supabase Auth</h3><div class="where mono">app/api/auth.py</div><p>Registo, login e emissão de tokens JWT.</p></div>
-      <div class="card tech"><h3>Supabase Postgres</h3><div class="where mono">app/core/supabase.py</div><p>Guarda exercícios, treinos e histórico. O RLS garante que cada utilizador só vê os seus dados.</p></div>
-      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Testa os endpoints sem levantar um servidor real.</p></div>
-      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Ambiente reproduzível para desenvolvimento e produção.</p></div>
+      <div class="card tech"><h3>PostgreSQL</h3><div class="where mono">docker-compose.yml, k8s/</div><p>Guarda utilizadores, exercícios, treinos e histórico.</p></div>
+      <div class="card tech"><h3>SQLAlchemy 2.0 + asyncpg</h3><div class="where mono">app/core/database.py, app/models/</div><p>Define as tabelas como classes Python e executa as consultas de forma assíncrona. Cada pedido recebe a sua própria sessão.</p></div>
+      <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Gera e aplica migrações, para que o esquema da base de dados fique versionado no Git.</p></div>
+      <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 guarda as passwords em hash; PyJWT assina e valida os tokens de acesso.</p></div>
+      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Testa os endpoints contra uma base de dados PostgreSQL de teste, sem levantar um servidor real.</p></div>
+      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Sobe a API e o PostgreSQL juntos com um só comando, sem precisar de internet.</p></div>
       <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Deploy, escalabilidade e health checks em produção.</p></div>
     </div>
   </section>
@@ -296,13 +295,13 @@ sequenceDiagram
     participant C as Cliente
     participant R as Rota FastAPI (workouts.py)
     participant D as get_current_user
-    participant S as Supabase Auth
     participant P as Pydantic
     participant DB as PostgreSQL
     C->>R: POST /workouts (Bearer token)
     R->>D: Resolver utilizador
-    D->>S: Validar token JWT
-    S-->>D: Utilizador válido (id)
+    D->>D: Verificar assinatura e validade do JWT (PyJWT)
+    D->>DB: SELECT utilizador pelo id do token
+    DB-->>D: Utilizador encontrado
     R->>P: Validar corpo (WorkoutCreate)
     P-->>R: Dados válidos ou erro 422
     R->>DB: INSERT em workouts (user_id = id)
@@ -317,7 +316,7 @@ sequenceDiagram
         <tbody>
           <tr><td>Token em falta ou inválido</td><td>Não autenticado</td><td class="center"><code>401</code></td></tr>
           <tr><td>Corpo inválido</td><td>Erro de validação (Pydantic)</td><td class="center"><code>422</code></td></tr>
-          <tr><td>Recurso de outro utilizador</td><td>Bloqueado pelo RLS</td><td class="center"><code>404</code></td></tr>
+          <tr><td>Recurso de outro utilizador</td><td>A consulta filtra por <code>user_id</code>, por isso não é encontrado</td><td class="center"><code>404</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -325,7 +324,7 @@ sequenceDiagram
 
   <section id="dados">
     <h2>Modelo de dados</h2>
-    <p class="section-lead">A tabela <code>users</code> é gerida pelo Supabase Auth, por isso a API não guarda passwords. <code>exercises</code> é um catálogo partilhado preenchido pelo <code>app/seed.py</code>. <code>workouts</code> e <code>workout_exercises</code> têm RLS: cada utilizador só lê e escreve os seus próprios registos.</p>
+    <p class="section-lead">Em <code>users</code> a password nunca é guardada em texto, apenas o hash Argon2. <code>exercises</code> é um catálogo partilhado preenchido pelo <code>app/seed.py</code>. <code>workouts</code> pertence a um utilizador: todas as consultas filtram por <code>user_id</code>, para que cada utilizador só leia e escreva os seus próprios registos.</p>
     <div class="card diagram">
 <pre class="mermaid">
 erDiagram
@@ -334,7 +333,9 @@ erDiagram
     EXERCISES ||--o{ WORKOUT_EXERCISES : "usado em"
     USERS {
         uuid id PK
-        string email
+        string email UK
+        string password_hash
+        timestamp created_at
     }
     EXERCISES {
         uuid id PK
@@ -374,11 +375,13 @@ erDiagram
           <ul class="tasks">
             <li class="done">Estrutura de pastas do projeto</li>
             <li class="done">Aplicação FastAPI com <code>/</code> e <code>/health</code></li>
-            <li><code>app/core/config.py</code> com pydantic-settings (lê <code>SUPABASE_URL</code> e <code>SUPABASE_KEY</code>)</li>
-            <li><code>app/core/supabase.py</code> com o cliente Supabase partilhado</li>
+            <li><code>app/core/config.py</code> com pydantic-settings (lê <code>DATABASE_URL</code>, <code>JWT_SECRET</code> e <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
+            <li>Serviço <code>db</code> (PostgreSQL 16) no <code>docker-compose.yml</code></li>
+            <li><code>app/core/database.py</code> com o engine async e uma dependência que abre e fecha uma sessão por pedido</li>
+            <li>Alembic inicializado e ligado aos modelos de <code>app/models/</code></li>
             <li>Primeiro teste: <code>tests/test_health.py</code></li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> a API arranca, lê a configuração e liga-se ao Supabase.</div>
+          <div class="deliverable"><b>Entregável:</b> a API arranca, lê a configuração, liga-se ao PostgreSQL e corre migrações.</div>
         </div>
       </div>
 
@@ -387,6 +390,8 @@ erDiagram
         <div class="card">
           <div class="phase-head"><h3>Autenticação</h3><span class="chip planned">Planeado</span></div>
           <ul class="tasks">
+            <li>Modelo e migração da tabela <code>users</code></li>
+            <li><code>app/core/security.py</code>: hash e verificação de passwords (Argon2), criação e validação de JWT</li>
             <li><code>POST /auth/register</code> para criar conta</li>
             <li><code>POST /auth/login</code> devolve <code>access_token</code> e <code>refresh_token</code></li>
             <li><code>POST /auth/refresh</code> para renovar a sessão</li>
@@ -402,7 +407,7 @@ erDiagram
         <div class="card">
           <div class="phase-head"><h3>Catálogo de exercícios</h3><span class="chip planned">Planeado</span></div>
           <ul class="tasks">
-            <li>Tabela <code>exercises</code> no Supabase</li>
+            <li>Modelo <code>Exercise</code> e migração Alembic da tabela <code>exercises</code></li>
             <li>Schema <code>ExerciseRead</code> em <code>app/schemas/exercise.py</code></li>
             <li><code>GET /exercises</code> com filtros por <code>muscle_group</code> e <code>equipment</code></li>
             <li><code>GET /exercises/{id}</code> com o detalhe de um exercício</li>
@@ -417,7 +422,7 @@ erDiagram
         <div class="card">
           <div class="phase-head"><h3>Gestão de treinos</h3><span class="chip planned">Planeado</span></div>
           <ul class="tasks">
-            <li>Tabelas <code>workouts</code> e <code>workout_exercises</code> com políticas RLS</li>
+            <li>Modelos e migração das tabelas <code>workouts</code> e <code>workout_exercises</code></li>
             <li>Schemas <code>WorkoutCreate</code>, <code>WorkoutUpdate</code> e <code>WorkoutRead</code></li>
             <li><code>POST /workouts</code> cria um treino com exercícios, séries, repetições e carga</li>
             <li><code>GET /workouts</code> lista os treinos do utilizador (paginado)</li>
@@ -425,7 +430,7 @@ erDiagram
             <li><code>PATCH /workouts/{id}</code> para editar</li>
             <li><code>DELETE /workouts/{id}</code> para apagar</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> CRUD completo de treinos, isolado por utilizador.</div>
+          <div class="deliverable"><b>Entregável:</b> CRUD completo de treinos. Todas as consultas filtram por <code>user_id</code>, e um teste garante que um utilizador não vê os treinos de outro.</div>
         </div>
       </div>
 
@@ -447,8 +452,8 @@ erDiagram
           <div class="phase-head"><h3>Qualidade</h3><span class="chip planned">Planeado</span></div>
           <ul class="tasks">
             <li>Testes de cada router com Pytest + HTTPX</li>
-            <li>Mocks do cliente Supabase para testes rápidos e isolados</li>
-            <li>CI (GitHub Actions) a correr os testes em cada push e PR</li>
+            <li>Base de dados PostgreSQL de teste, limpa entre testes</li>
+            <li>CI (GitHub Actions) com um serviço PostgreSQL, a correr migrações e testes em cada push e PR</li>
             <li>Tratamento de erros uniforme (um único formato JSON para erros)</li>
           </ul>
           <div class="deliverable"><b>Entregável:</b> pipeline verde e cobertura dos fluxos principais.</div>
@@ -461,9 +466,11 @@ erDiagram
           <div class="phase-head"><h3>Containerização e deploy</h3><span class="chip planned">Planeado</span></div>
           <ul class="tasks">
             <li><code>Dockerfile</code> com imagem <code>python:3.11-slim</code> e arranque com Uvicorn</li>
-            <li><code>docker-compose.yml</code> para desenvolvimento local</li>
-            <li><code>k8s/deployment.yaml</code> com réplicas, <code>Secret</code> para as credenciais e probes em <code>/health</code></li>
+            <li><code>docker-compose.yml</code> completo: API + PostgreSQL com volume persistente</li>
+            <li>Migrações aplicadas automaticamente no arranque do container</li>
+            <li><code>k8s/deployment.yaml</code> com réplicas, <code>Secret</code> para <code>DATABASE_URL</code> e <code>JWT_SECRET</code> e probes em <code>/health</code></li>
             <li><code>k8s/service.yaml</code> para expor a API no cluster</li>
+            <li>PostgreSQL em produção: base de dados gerida (Neon, RDS) ou StatefulSet no cluster</li>
           </ul>
           <div class="deliverable"><b>Entregável:</b> a API corre em Docker e é publicável num cluster Kubernetes.</div>
         </div>
