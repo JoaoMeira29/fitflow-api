@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FitFlow API Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #f1f3f6;
+    --border: #e3e6eb;
+    --text: #15181d;
+    --muted: #5d6573;
+    --accent: #0f9d8a;
+    --accent-soft: #e2f5f2;
+    --done: #1f9d55;
+    --done-soft: #e3f6ea;
+    --progress: #c76a00;
+    --progress-soft: #fdf0e1;
+    --planned: #6b7280;
+    --planned-soft: #eef0f3;
+    --get: #2563eb;
+    --post: #1f9d55;
+    --patch: #c76a00;
+    --delete: #dc2626;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 16px rgba(16, 24, 40, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1116;
+      --surface: #161b22;
+      --surface-2: #1d232c;
+      --border: #2a313c;
+      --text: #e6e9ee;
+      --muted: #9aa3b2;
+      --accent: #34d3bd;
+      --accent-soft: #11302c;
+      --done: #4ade80;
+      --done-soft: #12301f;
+      --progress: #fbbf24;
+      --progress-soft: #33270d;
+      --planned: #9ca3af;
+      --planned-soft: #242a33;
+      --get: #60a5fa;
+      --post: #4ade80;
+      --patch: #fbbf24;
+      --delete: #f87171;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116;
+    --surface: #161b22;
+    --surface-2: #1d232c;
+    --border: #2a313c;
+    --text: #e6e9ee;
+    --muted: #9aa3b2;
+    --accent: #34d3bd;
+    --accent-soft: #11302c;
+    --done: #4ade80;
+    --done-soft: #12301f;
+    --progress: #fbbf24;
+    --progress-soft: #33270d;
+    --planned: #9ca3af;
+    --planned-soft: #242a33;
+    --get: #60a5fa;
+    --post: #4ade80;
+    --patch: #fbbf24;
+    --delete: #f87171;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 "Inter", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Navegação */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .inner {
+    max-width: 1040px; margin: 0 auto; padding: 0 16px;
+    display: flex; align-items: center; gap: 20px; height: 56px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  nav .inner::-webkit-scrollbar { display: none; }
+  nav .brand { font-weight: 700; white-space: nowrap; color: var(--text); }
+  nav a.link { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  nav a.link:hover { color: var(--text); text-decoration: none; }
+
+  main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
+
+  /* Cabeçalho */
+  header.hero { padding: 56px 0 32px; }
+  .eyebrow {
+    display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+  }
+  h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 0 0 14px; letter-spacing: -.02em; }
+  .lead { font-size: 17px; color: var(--muted); max-width: 680px; margin: 0; }
+
+  .progress-card {
+    margin-top: 28px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow);
+  }
+  .progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .progress-head strong { font-size: 15px; }
+  .progress-head span { color: var(--muted); font-size: 14px; }
+  .bar { height: 8px; background: var(--surface-2); border-radius: 99px; margin-top: 12px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 99px; }
+
+  .note {
+    margin-top: 16px; padding: 12px 16px; border-radius: 10px;
+    background: var(--accent-soft); color: var(--text); font-size: 14px;
+    border-left: 3px solid var(--accent);
+  }
+
+  /* Secções */
+  section { padding-top: 48px; }
+  h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .section-lead { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .diagram { padding: 24px 16px; overflow-x: auto; text-align: center; }
+  .diagram .mermaid { min-width: 520px; }
+
+  /* Tabelas */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--surface-2); }
+  tr:last-child td { border-bottom: 0; }
+  td.center, th.center { text-align: center; }
+  thead tr th:first-child { border-top-left-radius: 14px; }
+  thead tr th:last-child { border-top-right-radius: 14px; }
+
+  /* Tecnologias */
+  .tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .tech { padding: 18px 20px; }
+  .tech h3 { margin: 0 0 4px; font-size: 16px; }
+  .tech .where { font-size: 12.5px; color: var(--accent); margin-bottom: 8px; }
+  .tech p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* Fases */
+  .timeline { position: relative; display: grid; gap: 16px; }
+  .phase { display: grid; grid-template-columns: 44px 1fr; gap: 16px; }
+  .phase .num {
+    width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+    font-weight: 700; background: var(--surface); border: 2px solid var(--border); color: var(--muted);
+  }
+  .phase.progress .num { border-color: var(--progress); color: var(--progress); }
+  .phase.done .num { border-color: var(--done); color: var(--done); }
+  .phase .card { padding: 18px 20px; }
+  .phase-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .phase-head h3 { margin: 0; font-size: 17px; }
+  ul.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  ul.tasks li { position: relative; padding-left: 28px; font-size: 14px; }
+  ul.tasks li::before {
+    content: ""; position: absolute; left: 0; top: 4px;
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--border); background: var(--surface);
+    box-sizing: border-box;
+  }
+  ul.tasks li.done { color: var(--muted); }
+  ul.tasks li.done::before {
+    background: var(--done); border-color: var(--done);
+    -webkit-mask: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 100%;
+  }
+  .deliverable {
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border);
+    font-size: 13.5px; color: var(--muted);
+  }
+  .deliverable b { color: var(--text); font-weight: 600; }
+
+  /* Etiquetas */
+  .chip {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .chip.done { background: var(--done-soft); color: var(--done); }
+  .chip.progress { background: var(--progress-soft); color: var(--progress); }
+  .chip.planned { background: var(--planned-soft); color: var(--planned); }
+  .method {
+    display: inline-block; min-width: 62px; text-align: center; padding: 2px 8px;
+    border-radius: 6px; font: 600 12px "JetBrains Mono", monospace;
+    border: 1px solid currentColor;
+  }
+  .m-get { color: var(--get); } .m-post { color: var(--post); }
+  .m-patch { color: var(--patch); } .m-delete { color: var(--delete); }
+  .yes { color: var(--text); } .no { color: var(--muted); }
+
+  .errors { margin-top: 14px; }
+  footer { margin-top: 64px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  @media (max-width: 560px) {
+    .phase { grid-template-columns: 1fr; gap: 8px; }
+    .phase .num { width: 36px; height: 36px; font-size: 14px; }
+    th, td { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <span class="brand">FitFlow API</span>
+    <a class="link" href="#visao-geral">Visão geral</a>
+    <a class="link" href="#tecnologias">Tecnologias</a>
+    <a class="link" href="#ciclo">Ciclo de um pedido</a>
+    <a class="link" href="#dados">Modelo de dados</a>
+    <a class="link" href="#fases">Fases</a>
+    <a class="link" href="#endpoints">Endpoints</a>
+  </div>
+</nav>
+
+<main>
+  <header class="hero">
+    <span class="eyebrow">Roadmap</span>
+    <h1>Como a FitFlow API vai ser construída</h1>
+    <p class="lead">Como as tecnologias do projeto trabalham em conjunto, o percurso de um pedido pela API, o modelo de dados e as fases de desenvolvimento.</p>
+
+    <div class="progress-card">
+      <div class="progress-head">
+        <strong>Fase 1 de 7 em progresso</strong>
+        <span>2 de 32 tarefas concluídas</span>
+      </div>
+      <div class="bar"><div style="width: 6%"></div></div>
+    </div>
+
+    <div class="note">É um plano vivo: rotas, tabelas e fases podem mudar à medida que o projeto evolui.</div>
+  </header>
+
+  <section id="visao-geral">
+    <h2>Visão geral</h2>
+    <p class="section-lead">A API é uma camada fina entre o cliente e o Supabase: valida os dados, aplica as regras de negócio e devolve respostas consistentes. A autenticação e o armazenamento ficam a cargo do Supabase.</p>
+    <div class="card diagram">
+<pre class="mermaid">
+flowchart LR
+    Client["Cliente<br/>(Web / Mobile)"] -->|HTTP + JWT| API
+    subgraph K8s["Kubernetes / Docker"]
+        API["FitFlow API<br/>FastAPI + Uvicorn"]
+    end
+    subgraph Supabase
+        Auth["Supabase Auth<br/>(GoTrue)"]
+        DB[("PostgreSQL<br/>+ Row Level Security")]
+    end
+    API -->|registo / login / validar token| Auth
+    API -->|consultas| DB
+</pre>
+    </div>
+  </section>
+
+  <section id="tecnologias">
+    <h2>Papel de cada tecnologia</h2>
+    <p class="section-lead">O que cada peça faz e onde vive no código.</p>
+    <div class="tech-grid">
+      <div class="card tech"><h3>FastAPI</h3><div class="where mono">app/main.py, app/api/</div><p>Define as rotas, injeta dependências (ex.: utilizador autenticado) e gera a especificação OpenAPI.</p></div>
+      <div class="card tech"><h3>Uvicorn</h3><div class="where mono">Arranque / Dockerfile</div><p>Servidor ASGI que executa a aplicação.</p></div>
+      <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Valida os dados de entrada e formata as respostas.</p></div>
+      <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Lê e valida as variáveis de ambiente do ficheiro <code>.env</code>.</p></div>
+      <div class="card tech"><h3>Supabase Auth</h3><div class="where mono">app/api/auth.py</div><p>Registo, login e emissão de tokens JWT.</p></div>
+      <div class="card tech"><h3>Supabase Postgres</h3><div class="where mono">app/core/supabase.py</div><p>Guarda exercícios, treinos e histórico. O RLS garante que cada utilizador só vê os seus dados.</p></div>
+      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Testa os endpoints sem levantar um servidor real.</p></div>
+      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Ambiente reproduzível para desenvolvimento e produção.</p></div>
+      <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Deploy, escalabilidade e health checks em produção.</p></div>
+    </div>
+  </section>
+
+  <section id="ciclo">
+    <h2>Ciclo de um pedido</h2>
+    <p class="section-lead">Exemplo: um utilizador autenticado cria um treino.</p>
+    <div class="card diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant R as Rota FastAPI (workouts.py)
+    participant D as get_current_user
+    participant S as Supabase Auth
+    participant P as Pydantic
+    participant DB as PostgreSQL
+    C->>R: POST /workouts (Bearer token)
+    R->>D: Resolver utilizador
+    D->>S: Validar token JWT
+    S-->>D: Utilizador válido (id)
+    R->>P: Validar corpo (WorkoutCreate)
+    P-->>R: Dados válidos ou erro 422
+    R->>DB: INSERT em workouts (user_id = id)
+    DB-->>R: Registo criado
+    R->>P: Serializar resposta (WorkoutRead)
+    R-->>C: 201 Created + JSON
+</pre>
+    </div>
+    <div class="card errors table-wrap">
+      <table>
+        <thead><tr><th>Passo</th><th>Erro</th><th class="center">Código</th></tr></thead>
+        <tbody>
+          <tr><td>Token em falta ou inválido</td><td>Não autenticado</td><td class="center"><code>401</code></td></tr>
+          <tr><td>Corpo inválido</td><td>Erro de validação (Pydantic)</td><td class="center"><code>422</code></td></tr>
+          <tr><td>Recurso de outro utilizador</td><td>Bloqueado pelo RLS</td><td class="center"><code>404</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="dados">
+    <h2>Modelo de dados</h2>
+    <p class="section-lead">A tabela <code>users</code> é gerida pelo Supabase Auth, por isso a API não guarda passwords. <code>exercises</code> é um catálogo partilhado preenchido pelo <code>app/seed.py</code>. <code>workouts</code> e <code>workout_exercises</code> têm RLS: cada utilizador só lê e escreve os seus próprios registos.</p>
+    <div class="card diagram">
+<pre class="mermaid">
+erDiagram
+    USERS ||--o{ WORKOUTS : cria
+    WORKOUTS ||--|{ WORKOUT_EXERCISES : contem
+    EXERCISES ||--o{ WORKOUT_EXERCISES : "usado em"
+    USERS {
+        uuid id PK
+        string email
+    }
+    EXERCISES {
+        uuid id PK
+        string name
+        string muscle_group
+        string equipment
+        text description
+    }
+    WORKOUTS {
+        uuid id PK
+        uuid user_id FK
+        string name
+        date performed_at
+        text notes
+    }
+    WORKOUT_EXERCISES {
+        uuid id PK
+        uuid workout_id FK
+        uuid exercise_id FK
+        int sets
+        int reps
+        float weight_kg
+    }
+</pre>
+    </div>
+  </section>
+
+  <section id="fases">
+    <h2>Fases de desenvolvimento</h2>
+    <p class="section-lead">Cada fase termina com um entregável que funciona por si só.</p>
+    <div class="timeline">
+
+      <div class="phase progress">
+        <div class="num">1</div>
+        <div class="card">
+          <div class="phase-head"><h3>Fundação</h3><span class="chip progress">Em progresso</span></div>
+          <ul class="tasks">
+            <li class="done">Estrutura de pastas do projeto</li>
+            <li class="done">Aplicação FastAPI com <code>/</code> e <code>/health</code></li>
+            <li><code>app/core/config.py</code> com pydantic-settings (lê <code>SUPABASE_URL</code> e <code>SUPABASE_KEY</code>)</li>
+            <li><code>app/core/supabase.py</code> com o cliente Supabase partilhado</li>
+            <li>Primeiro teste: <code>tests/test_health.py</code></li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> a API arranca, lê a configuração e liga-se ao Supabase.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">2</div>
+        <div class="card">
+          <div class="phase-head"><h3>Autenticação</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li><code>POST /auth/register</code> para criar conta</li>
+            <li><code>POST /auth/login</code> devolve <code>access_token</code> e <code>refresh_token</code></li>
+            <li><code>POST /auth/refresh</code> para renovar a sessão</li>
+            <li><code>GET /auth/me</code> com os dados do utilizador autenticado</li>
+            <li>Dependência <code>get_current_user</code> reutilizável nas rotas protegidas</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> um utilizador consegue registar-se, fazer login e aceder a rotas protegidas.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">3</div>
+        <div class="card">
+          <div class="phase-head"><h3>Catálogo de exercícios</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li>Tabela <code>exercises</code> no Supabase</li>
+            <li>Schema <code>ExerciseRead</code> em <code>app/schemas/exercise.py</code></li>
+            <li><code>GET /exercises</code> com filtros por <code>muscle_group</code> e <code>equipment</code></li>
+            <li><code>GET /exercises/{id}</code> com o detalhe de um exercício</li>
+            <li><code>app/seed.py</code> para povoar o catálogo inicial</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> catálogo de exercícios consultável pela API.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">4</div>
+        <div class="card">
+          <div class="phase-head"><h3>Gestão de treinos</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li>Tabelas <code>workouts</code> e <code>workout_exercises</code> com políticas RLS</li>
+            <li>Schemas <code>WorkoutCreate</code>, <code>WorkoutUpdate</code> e <code>WorkoutRead</code></li>
+            <li><code>POST /workouts</code> cria um treino com exercícios, séries, repetições e carga</li>
+            <li><code>GET /workouts</code> lista os treinos do utilizador (paginado)</li>
+            <li><code>GET /workouts/{id}</code> com o detalhe</li>
+            <li><code>PATCH /workouts/{id}</code> para editar</li>
+            <li><code>DELETE /workouts/{id}</code> para apagar</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> CRUD completo de treinos, isolado por utilizador.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">5</div>
+        <div class="card">
+          <div class="phase-head"><h3>Progresso</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li><code>GET /progress/summary</code> com total de treinos, volume semanal e exercícios mais feitos</li>
+            <li><code>GET /progress/exercises/{id}</code> com a evolução da carga ao longo do tempo</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> o utilizador consegue ver a sua evolução.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">6</div>
+        <div class="card">
+          <div class="phase-head"><h3>Qualidade</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li>Testes de cada router com Pytest + HTTPX</li>
+            <li>Mocks do cliente Supabase para testes rápidos e isolados</li>
+            <li>CI (GitHub Actions) a correr os testes em cada push e PR</li>
+            <li>Tratamento de erros uniforme (um único formato JSON para erros)</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> pipeline verde e cobertura dos fluxos principais.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">7</div>
+        <div class="card">
+          <div class="phase-head"><h3>Containerização e deploy</h3><span class="chip planned">Planeado</span></div>
+          <ul class="tasks">
+            <li><code>Dockerfile</code> com imagem <code>python:3.11-slim</code> e arranque com Uvicorn</li>
+            <li><code>docker-compose.yml</code> para desenvolvimento local</li>
+            <li><code>k8s/deployment.yaml</code> com réplicas, <code>Secret</code> para as credenciais e probes em <code>/health</code></li>
+            <li><code>k8s/service.yaml</code> para expor a API no cluster</li>
+          </ul>
+          <div class="deliverable"><b>Entregável:</b> a API corre em Docker e é publicável num cluster Kubernetes.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="endpoints">
+    <h2>Endpoints planeados</h2>
+    <p class="section-lead">Todas as rotas previstas, com a fase em que serão implementadas.</p>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Rota</th><th class="center">Autenticação</th><th class="center">Fase</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/</code></td><td class="center no">Não</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/health</code></td><td class="center no">Não</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">Não</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">Não</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/refresh</code></td><td class="center no">Não</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Sim</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises</code></td><td class="center yes">Sim</td><td class="center">3</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises/{id}</code></td><td class="center yes">Sim</td><td class="center">3</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/workouts</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-patch">PATCH</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-delete">DELETE</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/summary</code></td><td class="center yes">Sim</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/exercises/{id}</code></td><td class="center yes">Sim</td><td class="center">5</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>FitFlow API · Roadmap do projeto</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  (function () {
+    var forced = document.documentElement.getAttribute("data-theme");
+    var dark = forced ? forced === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: dark ? "dark" : "neutral",
+      fontFamily: "Inter, system-ui, sans-serif",
+      securityLevel: "strict"
+    });
+  })();
+</script>
+</body>
+</html>
