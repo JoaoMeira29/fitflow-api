@@ -242,9 +242,9 @@
     <div class="progress-card">
       <div class="progress-head">
         <strong>Phase 1 of 7 in progress</strong>
-        <span>2 of 38 tasks done</span>
+        <span>3 of 38 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 5%"></div></div>
+      <div class="bar"><div style="width: 8%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -375,7 +375,7 @@ erDiagram
           <ul class="tasks">
             <li class="done">Project folder structure</li>
             <li class="done">FastAPI app with <code>/</code> and <code>/health</code></li>
-            <li><code>app/core/config.py</code> with pydantic-settings (reads <code>DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
+            <li class="done"><code>app/core/config.py</code> with pydantic-settings (reads <code>DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
             <li><code>db</code> service (PostgreSQL 16) in <code>docker-compose.yml</code></li>
             <li><code>app/core/database.py</code> with the async engine and a dependency that opens and closes one session per request</li>
             <li>Alembic initialized and wired to the models in <code>app/models/</code></li>
