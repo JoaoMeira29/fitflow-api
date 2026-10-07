@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-PT">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -87,7 +87,7 @@
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  /* Navegação */
+  /* Navigation */
   nav {
     position: sticky; top: 0; z-index: 10;
     background: color-mix(in srgb, var(--bg) 85%, transparent);
@@ -106,7 +106,7 @@
 
   main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
 
-  /* Cabeçalho */
+  /* Header */
   header.hero { padding: 56px 0 32px; }
   .eyebrow {
     display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .08em;
@@ -131,7 +131,7 @@
     border-left: 3px solid var(--accent);
   }
 
-  /* Secções */
+  /* Sections */
   section { padding-top: 48px; }
   h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
   .section-lead { color: var(--muted); margin: 0 0 20px; }
@@ -142,7 +142,7 @@
   .diagram { padding: 24px 16px; overflow-x: auto; text-align: center; }
   .diagram .mermaid { min-width: 520px; }
 
-  /* Tabelas */
+  /* Tables */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -152,14 +152,14 @@
   thead tr th:first-child { border-top-left-radius: 14px; }
   thead tr th:last-child { border-top-right-radius: 14px; }
 
-  /* Tecnologias */
+  /* Tech stack */
   .tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .tech { padding: 18px 20px; }
   .tech h3 { margin: 0 0 4px; font-size: 16px; }
   .tech .where { font-size: 12.5px; color: var(--accent); margin-bottom: 8px; }
   .tech p { margin: 0; color: var(--muted); font-size: 14px; }
 
-  /* Fases */
+  /* Phases */
   .timeline { position: relative; display: grid; gap: 16px; }
   .phase { display: grid; grid-template-columns: 44px 1fr; gap: 16px; }
   .phase .num {
@@ -192,7 +192,7 @@
   }
   .deliverable b { color: var(--text); font-weight: 600; }
 
-  /* Etiquetas */
+  /* Badges */
   .chip {
     display: inline-block; padding: 3px 10px; border-radius: 99px;
     font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -224,11 +224,11 @@
 <nav>
   <div class="inner">
     <span class="brand">FitFlow API</span>
-    <a class="link" href="#visao-geral">Visão geral</a>
-    <a class="link" href="#tecnologias">Tecnologias</a>
-    <a class="link" href="#ciclo">Ciclo de um pedido</a>
-    <a class="link" href="#dados">Modelo de dados</a>
-    <a class="link" href="#fases">Fases</a>
+    <a class="link" href="#overview">Overview</a>
+    <a class="link" href="#tech">Tech stack</a>
+    <a class="link" href="#lifecycle">Request lifecycle</a>
+    <a class="link" href="#data">Data model</a>
+    <a class="link" href="#phases">Phases</a>
     <a class="link" href="#endpoints">Endpoints</a>
   </div>
 </nav>
@@ -236,101 +236,101 @@
 <main>
   <header class="hero">
     <span class="eyebrow">Roadmap</span>
-    <h1>Como a FitFlow API vai ser construída</h1>
-    <p class="lead">Como as tecnologias do projeto trabalham em conjunto, o percurso de um pedido pela API, o modelo de dados e as fases de desenvolvimento.</p>
+    <h1>How the FitFlow API will be built</h1>
+    <p class="lead">How the project's technologies work together, the path a request takes through the API, the data model and the development phases.</p>
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Fase 1 de 7 em progresso</strong>
-        <span>2 de 38 tarefas concluídas</span>
+        <strong>Phase 1 of 7 in progress</strong>
+        <span>2 of 38 tasks done</span>
       </div>
       <div class="bar"><div style="width: 5%"></div></div>
     </div>
 
-    <div class="note">É um plano vivo: rotas, tabelas e fases podem mudar à medida que o projeto evolui.</div>
+    <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
   </header>
 
-  <section id="visao-geral">
-    <h2>Visão geral</h2>
-    <p class="section-lead">A API é dona de tudo: valida os dados, autentica os utilizadores com JWT emitidos por ela própria e guarda a informação num PostgreSQL acedido via SQLAlchemy. O esquema da base de dados evolui através de migrações Alembic versionadas no repositório.</p>
+  <section id="overview">
+    <h2>Overview</h2>
+    <p class="section-lead">The API owns everything: it validates data, authenticates users with JWTs it issues itself, and stores data in PostgreSQL through SQLAlchemy. The database schema evolves through Alembic migrations versioned in the repository.</p>
     <div class="card diagram">
 <pre class="mermaid">
 flowchart LR
-    Client["Cliente<br/>(Web / Mobile)"] -->|HTTP + JWT| API
+    Client["Client<br/>(Web / Mobile)"] -->|HTTP + JWT| API
     subgraph Stack["Docker Compose / Kubernetes"]
         API["FitFlow API<br/>FastAPI + Uvicorn"]
         DB[("PostgreSQL 16")]
     end
     API -->|"SQLAlchemy async (asyncpg)"| DB
-    Alembic["Alembic<br/>migrações"] -.->|cria e altera tabelas| DB
+    Alembic["Alembic<br/>migrations"] -.->|creates and alters tables| DB
 </pre>
     </div>
   </section>
 
-  <section id="tecnologias">
-    <h2>Papel de cada tecnologia</h2>
-    <p class="section-lead">O que cada peça faz e onde vive no código.</p>
+  <section id="tech">
+    <h2>What each technology does</h2>
+    <p class="section-lead">The role of each piece and where it lives in the code.</p>
     <div class="tech-grid">
-      <div class="card tech"><h3>FastAPI</h3><div class="where mono">app/main.py, app/api/</div><p>Define as rotas, injeta dependências (ex.: utilizador autenticado) e gera a especificação OpenAPI.</p></div>
-      <div class="card tech"><h3>Uvicorn</h3><div class="where mono">Arranque / Dockerfile</div><p>Servidor ASGI que executa a aplicação.</p></div>
-      <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Valida os dados de entrada e formata as respostas.</p></div>
-      <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Lê e valida as variáveis de ambiente do ficheiro <code>.env</code>.</p></div>
-      <div class="card tech"><h3>PostgreSQL</h3><div class="where mono">docker-compose.yml, k8s/</div><p>Guarda utilizadores, exercícios, treinos e histórico.</p></div>
-      <div class="card tech"><h3>SQLAlchemy 2.0 + asyncpg</h3><div class="where mono">app/core/database.py, app/models/</div><p>Define as tabelas como classes Python e executa as consultas de forma assíncrona. Cada pedido recebe a sua própria sessão.</p></div>
-      <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Gera e aplica migrações, para que o esquema da base de dados fique versionado no Git.</p></div>
-      <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 guarda as passwords em hash; PyJWT assina e valida os tokens de acesso.</p></div>
-      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Testa os endpoints contra uma base de dados PostgreSQL de teste, sem levantar um servidor real.</p></div>
-      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Sobe a API e o PostgreSQL juntos com um só comando, sem precisar de internet.</p></div>
-      <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Deploy, escalabilidade e health checks em produção.</p></div>
+      <div class="card tech"><h3>FastAPI</h3><div class="where mono">app/main.py, app/api/</div><p>Defines the routes, injects dependencies (e.g. the authenticated user) and generates the OpenAPI spec.</p></div>
+      <div class="card tech"><h3>Uvicorn</h3><div class="where mono">Startup / Dockerfile</div><p>ASGI server that runs the application.</p></div>
+      <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Validates incoming data and shapes the responses.</p></div>
+      <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Reads and validates the environment variables from the <code>.env</code> file.</p></div>
+      <div class="card tech"><h3>PostgreSQL</h3><div class="where mono">docker-compose.yml, k8s/</div><p>Stores users, exercises, workouts and history.</p></div>
+      <div class="card tech"><h3>SQLAlchemy 2.0 + asyncpg</h3><div class="where mono">app/core/database.py, app/models/</div><p>Defines tables as Python classes and runs queries asynchronously. Each request gets its own session.</p></div>
+      <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Generates and applies migrations, so the database schema is versioned in Git.</p></div>
+      <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 hashes passwords; PyJWT signs and validates access tokens.</p></div>
+      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Tests the endpoints against a test PostgreSQL database, without starting a real server.</p></div>
+      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Starts the API and PostgreSQL together with one command, no internet required.</p></div>
+      <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Deployment, scaling and health checks in production.</p></div>
     </div>
   </section>
 
-  <section id="ciclo">
-    <h2>Ciclo de um pedido</h2>
-    <p class="section-lead">Exemplo: um utilizador autenticado cria um treino.</p>
+  <section id="lifecycle">
+    <h2>Request lifecycle</h2>
+    <p class="section-lead">Example: an authenticated user creates a workout.</p>
     <div class="card diagram">
 <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant C as Cliente
-    participant R as Rota FastAPI (workouts.py)
+    participant C as Client
+    participant R as FastAPI route (workouts.py)
     participant D as get_current_user
     participant P as Pydantic
     participant DB as PostgreSQL
     C->>R: POST /workouts (Bearer token)
-    R->>D: Resolver utilizador
-    D->>D: Verificar assinatura e validade do JWT (PyJWT)
-    D->>DB: SELECT utilizador pelo id do token
-    DB-->>D: Utilizador encontrado
-    R->>P: Validar corpo (WorkoutCreate)
-    P-->>R: Dados válidos ou erro 422
-    R->>DB: INSERT em workouts (user_id = id)
-    DB-->>R: Registo criado
-    R->>P: Serializar resposta (WorkoutRead)
+    R->>D: Resolve user
+    D->>D: Check JWT signature and expiry (PyJWT)
+    D->>DB: SELECT user by token id
+    DB-->>D: User found
+    R->>P: Validate body (WorkoutCreate)
+    P-->>R: Valid data or 422 error
+    R->>DB: INSERT into workouts (user_id = id)
+    DB-->>R: Row created
+    R->>P: Serialize response (WorkoutRead)
     R-->>C: 201 Created + JSON
 </pre>
     </div>
     <div class="card errors table-wrap">
       <table>
-        <thead><tr><th>Passo</th><th>Erro</th><th class="center">Código</th></tr></thead>
+        <thead><tr><th>Step</th><th>Error</th><th class="center">Code</th></tr></thead>
         <tbody>
-          <tr><td>Token em falta ou inválido</td><td>Não autenticado</td><td class="center"><code>401</code></td></tr>
-          <tr><td>Corpo inválido</td><td>Erro de validação (Pydantic)</td><td class="center"><code>422</code></td></tr>
-          <tr><td>Recurso de outro utilizador</td><td>A consulta filtra por <code>user_id</code>, por isso não é encontrado</td><td class="center"><code>404</code></td></tr>
+          <tr><td>Missing or invalid token</td><td>Not authenticated</td><td class="center"><code>401</code></td></tr>
+          <tr><td>Invalid body</td><td>Validation error (Pydantic)</td><td class="center"><code>422</code></td></tr>
+          <tr><td>Another user's resource</td><td>The query filters by <code>user_id</code>, so it is not found</td><td class="center"><code>404</code></td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <section id="dados">
-    <h2>Modelo de dados</h2>
-    <p class="section-lead">Em <code>users</code> a password nunca é guardada em texto, apenas o hash Argon2. <code>exercises</code> é um catálogo partilhado preenchido pelo <code>app/seed.py</code>. <code>workouts</code> pertence a um utilizador: todas as consultas filtram por <code>user_id</code>, para que cada utilizador só leia e escreva os seus próprios registos.</p>
+  <section id="data">
+    <h2>Data model</h2>
+    <p class="section-lead">In <code>users</code> the password is never stored as plain text, only its Argon2 hash. <code>exercises</code> is a shared catalog filled by <code>app/seed.py</code>. <code>workouts</code> belong to a user: every query filters by <code>user_id</code>, so each user only reads and writes their own records.</p>
     <div class="card diagram">
 <pre class="mermaid">
 erDiagram
-    USERS ||--o{ WORKOUTS : cria
-    WORKOUTS ||--|{ WORKOUT_EXERCISES : contem
-    EXERCISES ||--o{ WORKOUT_EXERCISES : "usado em"
+    USERS ||--o{ WORKOUTS : creates
+    WORKOUTS ||--|{ WORKOUT_EXERCISES : contains
+    EXERCISES ||--o{ WORKOUT_EXERCISES : "used in"
     USERS {
         uuid id PK
         string email UK
@@ -363,116 +363,116 @@ erDiagram
     </div>
   </section>
 
-  <section id="fases">
-    <h2>Fases de desenvolvimento</h2>
-    <p class="section-lead">Cada fase termina com um entregável que funciona por si só.</p>
+  <section id="phases">
+    <h2>Development phases</h2>
+    <p class="section-lead">Each phase ends with a deliverable that works on its own.</p>
     <div class="timeline">
 
       <div class="phase progress">
         <div class="num">1</div>
         <div class="card">
-          <div class="phase-head"><h3>Fundação</h3><span class="chip progress">Em progresso</span></div>
+          <div class="phase-head"><h3>Foundation</h3><span class="chip progress">In progress</span></div>
           <ul class="tasks">
-            <li class="done">Estrutura de pastas do projeto</li>
-            <li class="done">Aplicação FastAPI com <code>/</code> e <code>/health</code></li>
-            <li><code>app/core/config.py</code> com pydantic-settings (lê <code>DATABASE_URL</code>, <code>JWT_SECRET</code> e <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
-            <li>Serviço <code>db</code> (PostgreSQL 16) no <code>docker-compose.yml</code></li>
-            <li><code>app/core/database.py</code> com o engine async e uma dependência que abre e fecha uma sessão por pedido</li>
-            <li>Alembic inicializado e ligado aos modelos de <code>app/models/</code></li>
-            <li>Primeiro teste: <code>tests/test_health.py</code></li>
+            <li class="done">Project folder structure</li>
+            <li class="done">FastAPI app with <code>/</code> and <code>/health</code></li>
+            <li><code>app/core/config.py</code> with pydantic-settings (reads <code>DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
+            <li><code>db</code> service (PostgreSQL 16) in <code>docker-compose.yml</code></li>
+            <li><code>app/core/database.py</code> with the async engine and a dependency that opens and closes one session per request</li>
+            <li>Alembic initialized and wired to the models in <code>app/models/</code></li>
+            <li>First test: <code>tests/test_health.py</code></li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> a API arranca, lê a configuração, liga-se ao PostgreSQL e corre migrações.</div>
+          <div class="deliverable"><b>Deliverable:</b> the API starts, reads its settings, connects to PostgreSQL and runs migrations.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">2</div>
         <div class="card">
-          <div class="phase-head"><h3>Autenticação</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Authentication</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Modelo e migração da tabela <code>users</code></li>
-            <li><code>app/core/security.py</code>: hash e verificação de passwords (Argon2), criação e validação de JWT</li>
-            <li><code>POST /auth/register</code> para criar conta</li>
-            <li><code>POST /auth/login</code> devolve <code>access_token</code> e <code>refresh_token</code></li>
-            <li><code>POST /auth/refresh</code> para renovar a sessão</li>
-            <li><code>GET /auth/me</code> com os dados do utilizador autenticado</li>
-            <li>Dependência <code>get_current_user</code> reutilizável nas rotas protegidas</li>
+            <li><code>users</code> model and migration</li>
+            <li><code>app/core/security.py</code>: password hashing and verification (Argon2), JWT creation and validation</li>
+            <li><code>POST /auth/register</code> to create an account</li>
+            <li><code>POST /auth/login</code> returns <code>access_token</code> and <code>refresh_token</code></li>
+            <li><code>POST /auth/refresh</code> to renew the session</li>
+            <li><code>GET /auth/me</code> returns the authenticated user</li>
+            <li>Reusable <code>get_current_user</code> dependency for protected routes</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> um utilizador consegue registar-se, fazer login e aceder a rotas protegidas.</div>
+          <div class="deliverable"><b>Deliverable:</b> a user can sign up, log in and access protected routes.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">3</div>
         <div class="card">
-          <div class="phase-head"><h3>Catálogo de exercícios</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Exercise catalog</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Modelo <code>Exercise</code> e migração Alembic da tabela <code>exercises</code></li>
-            <li>Schema <code>ExerciseRead</code> em <code>app/schemas/exercise.py</code></li>
-            <li><code>GET /exercises</code> com filtros por <code>muscle_group</code> e <code>equipment</code></li>
-            <li><code>GET /exercises/{id}</code> com o detalhe de um exercício</li>
-            <li><code>app/seed.py</code> para povoar o catálogo inicial</li>
+            <li><code>Exercise</code> model and Alembic migration for the <code>exercises</code> table</li>
+            <li><code>ExerciseRead</code> schema in <code>app/schemas/exercise.py</code></li>
+            <li><code>GET /exercises</code> with <code>muscle_group</code> and <code>equipment</code> filters</li>
+            <li><code>GET /exercises/{id}</code> returns a single exercise</li>
+            <li><code>app/seed.py</code> to fill the initial catalog</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> catálogo de exercícios consultável pela API.</div>
+          <div class="deliverable"><b>Deliverable:</b> an exercise catalog you can query through the API.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">4</div>
         <div class="card">
-          <div class="phase-head"><h3>Gestão de treinos</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Workout management</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Modelos e migração das tabelas <code>workouts</code> e <code>workout_exercises</code></li>
-            <li>Schemas <code>WorkoutCreate</code>, <code>WorkoutUpdate</code> e <code>WorkoutRead</code></li>
-            <li><code>POST /workouts</code> cria um treino com exercícios, séries, repetições e carga</li>
-            <li><code>GET /workouts</code> lista os treinos do utilizador (paginado)</li>
-            <li><code>GET /workouts/{id}</code> com o detalhe</li>
-            <li><code>PATCH /workouts/{id}</code> para editar</li>
-            <li><code>DELETE /workouts/{id}</code> para apagar</li>
+            <li>Models and migration for the <code>workouts</code> and <code>workout_exercises</code> tables</li>
+            <li><code>WorkoutCreate</code>, <code>WorkoutUpdate</code> and <code>WorkoutRead</code> schemas</li>
+            <li><code>POST /workouts</code> creates a workout with exercises, sets, reps and weight</li>
+            <li><code>GET /workouts</code> lists the user's workouts (paginated)</li>
+            <li><code>GET /workouts/{id}</code> returns a single workout</li>
+            <li><code>PATCH /workouts/{id}</code> to edit</li>
+            <li><code>DELETE /workouts/{id}</code> to delete</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> CRUD completo de treinos. Todas as consultas filtram por <code>user_id</code>, e um teste garante que um utilizador não vê os treinos de outro.</div>
+          <div class="deliverable"><b>Deliverable:</b> full workout CRUD. Every query filters by <code>user_id</code>, and a test ensures a user cannot see another user's workouts.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">5</div>
         <div class="card">
-          <div class="phase-head"><h3>Progresso</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Progress</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>GET /progress/summary</code> com total de treinos, volume semanal e exercícios mais feitos</li>
-            <li><code>GET /progress/exercises/{id}</code> com a evolução da carga ao longo do tempo</li>
+            <li><code>GET /progress/summary</code> with total workouts, weekly volume and most-used exercises</li>
+            <li><code>GET /progress/exercises/{id}</code> with weight progression over time</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> o utilizador consegue ver a sua evolução.</div>
+          <div class="deliverable"><b>Deliverable:</b> users can see their progress.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">6</div>
         <div class="card">
-          <div class="phase-head"><h3>Qualidade</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Quality</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Testes de cada router com Pytest + HTTPX</li>
-            <li>Base de dados PostgreSQL de teste, limpa entre testes</li>
-            <li>CI (GitHub Actions) com um serviço PostgreSQL, a correr migrações e testes em cada push e PR</li>
-            <li>Tratamento de erros uniforme (um único formato JSON para erros)</li>
+            <li>Tests for every router with Pytest + HTTPX</li>
+            <li>Test PostgreSQL database, cleaned between tests</li>
+            <li>CI (GitHub Actions) with a PostgreSQL service, running migrations and tests on every push and PR</li>
+            <li>Consistent error handling (a single JSON format for errors)</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> pipeline verde e cobertura dos fluxos principais.</div>
+          <div class="deliverable"><b>Deliverable:</b> a green pipeline and coverage of the main flows.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">7</div>
         <div class="card">
-          <div class="phase-head"><h3>Containerização e deploy</h3><span class="chip planned">Planeado</span></div>
+          <div class="phase-head"><h3>Containers and deployment</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>Dockerfile</code> com imagem <code>python:3.11-slim</code> e arranque com Uvicorn</li>
-            <li><code>docker-compose.yml</code> completo: API + PostgreSQL com volume persistente</li>
-            <li>Migrações aplicadas automaticamente no arranque do container</li>
-            <li><code>k8s/deployment.yaml</code> com réplicas, <code>Secret</code> para <code>DATABASE_URL</code> e <code>JWT_SECRET</code> e probes em <code>/health</code></li>
-            <li><code>k8s/service.yaml</code> para expor a API no cluster</li>
-            <li>PostgreSQL em produção: base de dados gerida (Neon, RDS) ou StatefulSet no cluster</li>
+            <li><code>Dockerfile</code> based on <code>python:3.11-slim</code>, started with Uvicorn</li>
+            <li>Complete <code>docker-compose.yml</code>: API + PostgreSQL with a persistent volume</li>
+            <li>Migrations applied automatically when the container starts</li>
+            <li><code>k8s/deployment.yaml</code> with replicas, a <code>Secret</code> for <code>DATABASE_URL</code> and <code>JWT_SECRET</code>, and probes on <code>/health</code></li>
+            <li><code>k8s/service.yaml</code> to expose the API inside the cluster</li>
+            <li>PostgreSQL in production: a managed database (Neon, RDS) or a StatefulSet in the cluster</li>
           </ul>
-          <div class="deliverable"><b>Entregável:</b> a API corre em Docker e é publicável num cluster Kubernetes.</div>
+          <div class="deliverable"><b>Deliverable:</b> the API runs in Docker and can be deployed to a Kubernetes cluster.</div>
         </div>
       </div>
 
@@ -480,33 +480,33 @@ erDiagram
   </section>
 
   <section id="endpoints">
-    <h2>Endpoints planeados</h2>
-    <p class="section-lead">Todas as rotas previstas, com a fase em que serão implementadas.</p>
+    <h2>Planned endpoints</h2>
+    <p class="section-lead">Every planned route, with the phase it will be built in.</p>
     <div class="card table-wrap">
       <table>
-        <thead><tr><th>Método</th><th>Rota</th><th class="center">Autenticação</th><th class="center">Fase</th></tr></thead>
+        <thead><tr><th>Method</th><th>Route</th><th class="center">Auth required</th><th class="center">Phase</th></tr></thead>
         <tbody>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/</code></td><td class="center no">Não</td><td class="center">1</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/health</code></td><td class="center no">Não</td><td class="center">1</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">Não</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">Não</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/refresh</code></td><td class="center no">Não</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Sim</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises</code></td><td class="center yes">Sim</td><td class="center">3</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises/{id}</code></td><td class="center yes">Sim</td><td class="center">3</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/workouts</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-patch">PATCH</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-delete">DELETE</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Sim</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/summary</code></td><td class="center yes">Sim</td><td class="center">5</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/exercises/{id}</code></td><td class="center yes">Sim</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/</code></td><td class="center no">No</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/health</code></td><td class="center no">No</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">No</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">No</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/refresh</code></td><td class="center no">No</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Yes</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises/{id}</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/workouts</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-patch">PATCH</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-delete">DELETE</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/summary</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/exercises/{id}</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <footer>FitFlow API · Roadmap do projeto</footer>
+  <footer>FitFlow API · Project roadmap</footer>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
