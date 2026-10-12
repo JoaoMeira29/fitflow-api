@@ -1,0 +1,16 @@
+# Keep the image small and keep secrets out of it.
+.git
+.github
+.env
+.env.example
+venv
+__pycache__
+*.pyc
+.pytest_cache
+tests
+k8s
+*.md
+ROADMAP.html
+docker-compose.yml
+Dockerfile
+.dockerignore

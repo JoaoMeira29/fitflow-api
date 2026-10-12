@@ -1,0 +1,31 @@
+# Runs once: applies the migrations and loads the catalogs.
+#
+# It is a Job and not part of the API's Deployment because the API runs as
+# several pods, and they would all try to migrate the database at once.
+# A Job cannot be changed after it is created, so delete it before applying
+# it again:
+#
+#   kubectl delete job fitflow-migrate --ignore-not-found
+#   kubectl apply -f k8s/migrate-job.yaml
+#   kubectl wait --for=condition=complete job/fitflow-migrate --timeout=120s
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fitflow-migrate
+spec:
+  # Try again a few times, for example while the database is still starting.
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: fitflow-api:latest
+          # Use the image built on this machine instead of pulling it.
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "alembic upgrade head && python -m app.seed"]
+          envFrom:
+            - configMapRef:
+                name: fitflow-config
+            - secretRef:
+                name: fitflow-secrets

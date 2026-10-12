@@ -1,0 +1,14 @@
+# Settings that are not secret. The secret ones are in secret.example.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fitflow-config
+data:
+  LLM_PROVIDER: "ollama"
+  # Where the API finds Ollama. This address works on Docker Desktop's
+  # Kubernetes, where Ollama runs on your machine. On a real cluster, point
+  # it at an Ollama service, or set LLM_PROVIDER to "anthropic" and add
+  # ANTHROPIC_API_KEY to the secret.
+  LLM_BASE_URL: "http://host.docker.internal:11434"
+  LLM_TIMEOUT_SECONDS: "180"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"

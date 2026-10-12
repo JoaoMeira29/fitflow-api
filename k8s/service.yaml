@@ -1,0 +1,15 @@
+# One stable address for the API pods, with requests spread across them.
+# ClusterIP is only reachable inside the cluster. To try it from your machine:
+#
+#   kubectl port-forward service/fitflow-api 8000:80
+apiVersion: v1
+kind: Service
+metadata:
+  name: fitflow-api
+spec:
+  type: ClusterIP
+  selector:
+    app: fitflow-api
+  ports:
+    - port: 80
+      targetPort: 8000

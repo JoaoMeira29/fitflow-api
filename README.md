@@ -10,8 +10,8 @@
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
-![Phase](https://img.shields.io/badge/phase-7%20of%208%20done-blue?style=flat-square)
+[![CI](https://github.com/JoaoMeira29/fitflow-api/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoMeira29/fitflow-api/actions/workflows/ci.yml)
+![Status](https://img.shields.io/badge/status-all%20phases%20done-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
@@ -25,7 +25,7 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation and progress logging work today, and plan generation is measured by evals. CI and deployment are planned. See the [Roadmap](#roadmap).
+> **All eight roadmap phases are built.** FitFlow is a portfolio project: it runs locally with a free local model, and it is not deployed anywhere public. See the [Roadmap](#roadmap) and the [Eval Results](#eval-results).
 
 ## Table of Contents
 
@@ -35,10 +35,13 @@
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
+- [Running with Docker](#running-with-docker)
+- [Kubernetes](#kubernetes)
 - [Environment Variables](#environment-variables)
 - [Endpoints](#endpoints)
 - [Interactive Docs](#interactive-docs)
 - [Running Tests](#running-tests)
+- [Continuous Integration](#continuous-integration)
 - [Eval Results](#eval-results)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -107,7 +110,9 @@ flowchart LR
 | LLM                  | Local model served by Ollama, or hosted Claude (Anthropic SDK), behind one provider-agnostic wrapper |
 | Testing              | Pytest, pytest-asyncio, HTTPX                |
 | Documentation        | OpenAPI (Swagger UI & ReDoc)                 |
-| Local Infrastructure | Docker Compose                               |
+| Containers           | Docker, Docker Compose                       |
+| Orchestration        | Kubernetes manifests                         |
+| CI                   | GitHub Actions                               |
 
 ---
 
@@ -148,11 +153,14 @@ fitflow-api/
 │   ├── schemas/          # Pydantic schemas (requests and responses)
 │   ├── main.py           # FastAPI entry point
 │   └── seed.py           # Loads the catalogs into the database
+├── .github/workflows/    # CI: migrations, tests and image build on every push
 ├── alembic/              # Database migrations
+├── k8s/                  # Kubernetes manifests
 ├── tests/                # Automated tests (the LLM is mocked)
 │   └── evals/            # Evals against the real model, with their results
 ├── alembic.ini           # Alembic configuration
-├── docker-compose.yml    # Local PostgreSQL
+├── docker-compose.yml    # PostgreSQL, and optionally the API, in containers
+├── Dockerfile            # The API as a container image
 ├── pytest.ini            # Pytest configuration
 ├── requirements.txt      # Project dependencies
 ├── .env.example          # Environment variables template
@@ -167,7 +175,7 @@ fitflow-api/
 
 ### Prerequisites
 
-- [Python 3.11+](https://www.python.org/downloads/)
+- [Python 3.11+](https://www.python.org/downloads/) (developed and tested on 3.14)
 - [Git](https://git-scm.com/)
 - [Docker Desktop](https://docs.docker.com/get-docker/), to run PostgreSQL
 - [Ollama](https://ollama.com/download), to run the LLM locally (only needed to generate plans, not to run the tests)
@@ -324,6 +332,54 @@ Generating a plan again after logging gives a plan that knows your new weight an
 
 ---
 
+## Running with Docker
+
+The Quick Start runs the API on your machine and only the database in Docker. To run **everything** in containers instead:
+
+```bash
+cp .env.example .env        # then set JWT_SECRET
+docker compose up --build
+```
+
+This starts three containers in order:
+
+1. `db`: PostgreSQL.
+2. `migrate`: applies the migrations, loads the catalogs, and exits.
+3. `api`: the API, on <http://127.0.0.1:8000>. It starts only after `migrate` succeeded.
+
+Ollama stays on your machine, so it can use the GPU; the API container reaches it at `host.docker.internal`. Stop the stack with `docker compose down`. Add `-v` to also delete the database volume.
+
+If you already run the API with `uvicorn` on port 8000, stop it first, because both use the same port.
+
+---
+
+## Kubernetes
+
+The manifests in [k8s/](k8s/) run the same stack on a cluster: PostgreSQL with a persistent disk, a one-off Job for migrations and catalogs, and two API pods behind a Service. They are validated against the Kubernetes schemas but have not been run on a cluster.
+
+```bash
+# 1. Build the image where the cluster can find it (Docker Desktop shares images)
+docker build -t fitflow-api .
+
+# 2. Create the secret from the template (secret.yaml is ignored by Git)
+cp k8s/secret.example.yaml k8s/secret.yaml      # then edit the values
+kubectl apply -f k8s/secret.yaml
+
+# 3. Settings and database
+kubectl apply -f k8s/configmap.yaml -f k8s/postgres.yaml
+kubectl wait --for=condition=available deployment/fitflow-db --timeout=120s
+
+# 4. Migrations and catalogs
+kubectl apply -f k8s/migrate-job.yaml
+kubectl wait --for=condition=complete job/fitflow-migrate --timeout=120s
+
+# 5. The API
+kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml
+kubectl port-forward service/fitflow-api 8000:80
+```
+
+---
+
 ## Environment Variables
 
 | Variable                      | Description                            | Example                                                       |
@@ -405,6 +461,18 @@ pytest
 
 These tests mock the LLM, so they need no model and run in seconds.
 
+### Continuous Integration
+
+Every push to `main` and every pull request runs [the CI workflow](.github/workflows/ci.yml) on GitHub Actions:
+
+1. Starts a PostgreSQL service.
+2. Applies the migrations, and checks that the models and the migrations agree.
+3. Loads the catalogs.
+4. Runs the regular tests.
+5. Builds the Docker image.
+
+The evals are not part of CI: they need a real model and take about 25 minutes.
+
 ### Evals
 
 The evals generate plans with the **real model** for 30 varied profiles and report how often each validation rule passes. They are slow and need Ollama running, so plain `pytest` skips them. They do not use the database.
@@ -468,7 +536,7 @@ The full plan (design rules, how a plan is generated, the data model and every p
 | 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
-| 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square) |
+| 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)  |
 
 ---
 

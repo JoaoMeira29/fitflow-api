@@ -1,3 +1,20 @@
+# Two ways to use this file:
+#
+#   docker compose up -d db      Development: only the database. The API runs
+#                                on your machine with uvicorn.
+#   docker compose up --build    Everything in containers: database,
+#                                migrations and the API on port 8000.
+
+# Settings shared by the two containers that run the app's code. The database
+# host is "db", the service name, because inside Docker each service is
+# reached by its name. This replaces the DATABASE_URL from .env, which points
+# at localhost.
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+asyncpg://fitflow:fitflow@db:5432/fitflow
+  # Ollama runs on your machine, not in Docker, so it can use the GPU.
+  # host.docker.internal is the address of your machine seen from a container.
+  LLM_BASE_URL: http://host.docker.internal:11434
+
 services:
   db:
     image: postgres:16
@@ -15,6 +32,30 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # Runs once and exits: applies the migrations and loads the catalogs.
+  migrate:
+    build: .
+    command: sh -c "alembic upgrade head && python -m app.seed"
+    env_file: .env
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment: *app-environment
+    extra_hosts:
+      # Docker Desktop defines host.docker.internal itself; Linux needs this.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      # Start only after the migrations have finished successfully.
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

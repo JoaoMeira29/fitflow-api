@@ -1,5 +1,6 @@
 venv/
 .env
+k8s/secret.yaml
 __pycache__/
 .pytest_cache/
 .DS_Store

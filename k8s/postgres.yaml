@@ -1,0 +1,77 @@
+# PostgreSQL for a demo cluster: one pod with a persistent disk. A production
+# setup would use a managed database instead.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fitflow-db-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitflow-db
+spec:
+  replicas: 1
+  # Stop the old pod before starting a new one: two pods must never share
+  # the same data disk.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: fitflow-db
+  template:
+    metadata:
+      labels:
+        app: fitflow-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: fitflow
+            - name: POSTGRES_DB
+              value: fitflow
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fitflow-secrets
+                  key: POSTGRES_PASSWORD
+            # Keep the data in a subfolder; the disk's root may not be empty.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "fitflow", "-d", "fitflow"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: fitflow-db-data
+---
+# Gives the database a stable name inside the cluster: fitflow-db.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fitflow-db
+spec:
+  selector:
+    app: fitflow-db
+  ports:
+    - port: 5432
+      targetPort: 5432

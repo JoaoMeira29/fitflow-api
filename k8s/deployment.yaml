@@ -1,0 +1,56 @@
+# The FitFlow API: two identical pods behind the Service in service.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitflow-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fitflow-api
+  template:
+    metadata:
+      labels:
+        app: fitflow-api
+    spec:
+      containers:
+        - name: api
+          image: fitflow-api:latest
+          # Use the image built on this machine instead of pulling it. With a
+          # registry, put the full image name above and remove this line.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # Every key of the ConfigMap and the Secret becomes an environment
+          # variable, which is where the app reads its settings from.
+          envFrom:
+            - configMapRef:
+                name: fitflow-config
+            - secretRef:
+                name: fitflow-secrets
+          # Ready: the pod may receive requests. Until this passes, the
+          # Service sends it no traffic.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          # Live: if this keeps failing, Kubernetes restarts the container.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            # The image already runs as a normal user; this enforces it.
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false

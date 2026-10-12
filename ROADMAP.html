@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 7 of 8 done</strong>
-        <span>51 of 55 tasks done</span>
+        <strong>All 8 phases done</strong>
+        <span>55 of 55 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 93%"></div></div>
+      <div class="bar"><div style="width: 100%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -588,15 +588,15 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">8</div>
         <div class="card">
-          <div class="phase-head"><h3>CI, deployment and docs</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>CI, deployment and docs</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li>GitHub Actions: PostgreSQL service, migrations and the regular tests on every push and PR</li>
-            <li><code>Dockerfile</code> and an API service in <code>docker-compose.yml</code></li>
-            <li>Kubernetes manifests in <code>k8s/</code></li>
-            <li>Final README and roadmap, including the eval results</li>
+            <li class="done">GitHub Actions: PostgreSQL service, migrations, a model-versus-migration check, the regular tests and an image build on every push and PR</li>
+            <li class="done"><code>Dockerfile</code>, and migration and API services in <code>docker-compose.yml</code></li>
+            <li class="done">Kubernetes manifests in <code>k8s/</code></li>
+            <li class="done">Final README and roadmap, including the eval results</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> a green pipeline, a containerised API and documentation that matches the product.</div>
         </div>

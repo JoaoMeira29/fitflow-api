@@ -1,0 +1,70 @@
+name: CI
+
+# Run on every push to main and on every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Migrations and tests
+    runs-on: ubuntu-latest
+
+    # A real PostgreSQL for the tests, started next to the job.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fitflow
+          POSTGRES_PASSWORD: fitflow
+          POSTGRES_DB: fitflow
+        ports:
+          - 5432:5432
+        # The job waits until the database accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U fitflow -d fitflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # There is no .env file in CI, so the settings come from here. Both values
+    # are throwaway: the database only lives for this job.
+    env:
+      DATABASE_URL: postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow
+      JWT_SECRET: ci-only-secret-never-used-outside-this-workflow
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply the migrations
+        run: alembic upgrade head
+
+      # Fails if a model was changed without writing a migration for it.
+      - name: Check the models match the migrations
+        run: alembic check
+
+      - name: Load the catalogs
+        run: python -m app.seed
+
+      # The regular tests mock the LLM, so no model or API key is needed.
+      # The evals are skipped (see pytest.ini).
+      - name: Run the tests
+        run: pytest
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t fitflow-api .
