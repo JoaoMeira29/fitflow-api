@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 1 of 8 done</strong>
-        <span>12 of 52 tasks done</span>
+        <strong>Phase 2 of 8 done</strong>
+        <span>19 of 53 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 23%"></div></div>
+      <div class="bar"><div style="width: 36%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -479,6 +479,7 @@ erDiagram
             <li class="done">Alembic set up for async, reading the database URL from the app settings</li>
             <li class="done"><code>users</code> model and migration</li>
             <li class="done"><code>app/core/security.py</code>: Argon2 password hashing, JWT creation and validation</li>
+            <li class="done">Password policy: 12 to 40 characters, and common passwords rejected from a bundled blocklist</li>
             <li class="done"><code>POST /auth/register</code></li>
             <li class="done"><code>POST /auth/login</code></li>
             <li class="done"><code>GET /auth/me</code> and the reusable <code>get_current_user</code> dependency</li>
@@ -488,17 +489,17 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">2</div>
         <div class="card">
-          <div class="phase-head"><h3>User profile</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>User profile</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li><code>profiles</code> model and migration, one profile per user</li>
-            <li>Profile schemas with validated ranges and fixed choices (goal, sex, activity level, equipment)</li>
-            <li><code>PUT /profile</code> to create or update the profile</li>
-            <li><code>GET /profile</code></li>
-            <li>Reject users under 18, based on birth date</li>
-            <li>Tests</li>
+            <li class="done"><code>profiles</code> model and migration, one profile per user</li>
+            <li class="done">Profile schemas with validated ranges and fixed choices (goal, sex, activity level, equipment, allergies, dietary restrictions)</li>
+            <li class="done"><code>PUT /profile</code> to create or update the profile</li>
+            <li class="done"><code>GET /profile</code></li>
+            <li class="done">Reject users under 18, based on birth date</li>
+            <li class="done">Tests</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> a logged-in user can save the profile every later phase depends on.</div>
         </div>

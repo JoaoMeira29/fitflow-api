@@ -10,7 +10,9 @@ from sqlalchemy.pool import NullPool
 from app import models  # noqa: F401  (registers every table on Base.metadata)
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.security import create_access_token
 from app.main import app
+from app.models.user import User
 
 # Tests run against a separate database on the same PostgreSQL server, so
 # they never touch development data.
@@ -63,6 +65,25 @@ async def clean_tables():
 async def db_session():
     async with TestSessionLocal() as session:
         yield session
+
+
+@pytest.fixture
+async def auth_headers_for(db_session):
+    """Create a user directly in the database and return its auth headers.
+    This skips the register and login endpoints, so no Argon2 hashing runs."""
+
+    async def create(email: str) -> dict[str, str]:
+        user = User(email=email, password_hash="not-a-real-hash")
+        db_session.add(user)
+        await db_session.commit()
+        return {"Authorization": f"Bearer {create_access_token(str(user.id))}"}
+
+    return create
+
+
+@pytest.fixture
+async def auth_headers(auth_headers_for):
+    return await auth_headers_for("ana@example.com")
 
 
 @pytest.fixture

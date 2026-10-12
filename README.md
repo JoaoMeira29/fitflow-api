@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
-![Phase](https://img.shields.io/badge/phase-1%20of%208%20done-blue?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-2%20of%208%20done-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
@@ -25,7 +25,7 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** Sign-up, login and JWT authentication work today. Profiles, catalogs, plan generation and evals are planned. See the [Roadmap](#roadmap).
+> **Work in progress.** Sign-up, login, JWT authentication and user profiles work today. Catalogs, plan generation and evals are planned. See the [Roadmap](#roadmap).
 
 ## Table of Contents
 
@@ -51,7 +51,7 @@ A user creates a profile: goal, age, sex, weight, height, activity level, traini
 | Feature            | Description                                                         | Status      |
 | ------------------ | ------------------------------------------------------------------- | ----------- |
 | **Authentication** | Sign up and log in with JWT tokens                                  | Available   |
-| **Profile**        | The user's goal, body data, equipment, allergies and restrictions   | Planned     |
+| **Profile**        | The user's goal, body data, equipment, allergies and restrictions   | Available   |
 | **Targets**        | Daily calories and macros, computed in code                         | Planned     |
 | **Workout plans**  | A weekly plan built from the exercise catalog                       | Planned     |
 | **Diet plans**     | A daily meal plan built from the food catalog                       | Planned     |
@@ -119,10 +119,13 @@ fitflow-api/
 ├── app/
 │   ├── api/
 │   │   ├── auth.py       # Sign up, login, current user
-│   │   └── deps.py       # Shared dependencies (database session, current user)
+│   │   ├── deps.py       # Shared dependencies (database session, current user)
+│   │   └── profile.py    # Create, update and read the profile
 │   ├── core/
+│   │   ├── age.py        # Age calculation and the minimum age
 │   │   ├── config.py     # Settings, read from .env
 │   │   ├── database.py   # SQLAlchemy engine, sessions and Base
+│   │   ├── enums.py      # Fixed choices (goal, equipment, allergens, ...)
 │   │   └── security.py   # Password hashing, password blocklist and JWT tokens
 │   ├── data/
 │   │   └── common_passwords.txt  # Blocklist of common passwords
@@ -219,6 +222,15 @@ curl -X POST http://127.0.0.1:8000/auth/login \
 
 # Call a protected route
 curl http://127.0.0.1:8000/auth/me -H "Authorization: Bearer <access_token>"
+
+# Save your profile
+curl -X PUT http://127.0.0.1:8000/profile \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "lose_weight", "birth_date": "1995-06-15", "sex": "female",
+       "height_cm": 165, "weight_kg": 68.5, "activity_level": "moderate",
+       "training_days_per_week": 4, "equipment": ["bodyweight", "dumbbells"],
+       "allergies": ["peanuts"], "dietary_restrictions": ["vegetarian"]}'
 ```
 
 ---
@@ -251,7 +263,8 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | `POST` | `/auth/register`    | Create an account                  | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `POST` | `/auth/login`       | Get an access token                | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/auth/me`          | The logged-in user                 | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
-| `PUT`  | `/profile`          | Create or update the profile       | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| `PUT`  | `/profile`          | Create or update the profile       | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/profile`          | The logged-in user's profile       | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/profile/targets`  | Computed calorie and macro targets | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
 | `POST` | `/plans/workout`    | Generate a weekly workout plan     | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
 | `POST` | `/plans/diet`       | Generate a daily meal plan         | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
@@ -291,7 +304,7 @@ The full plan (design rules, how a plan is generated, the data model and every p
 | Phase | Goal                                              | Status                                                                  |
 | :---: | ------------------------------------------------- | ----------------------------------------------------------------------- |
 | 1     | Foundation and auth (settings, database, JWT)     | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
-| 2     | User profile                                      | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 2     | User profile                                      | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 3     | Exercise and food catalogs, targets calculator    | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
 | 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
 | 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
