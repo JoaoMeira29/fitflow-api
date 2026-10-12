@@ -11,6 +11,7 @@ class FoodBase(BaseModel):
     protein_per_100g: float = Field(ge=0, le=100)
     carbs_per_100g: float = Field(ge=0, le=100)
     fat_per_100g: float = Field(ge=0, le=100)
+    max_portion_g: float = Field(gt=0, le=600)
     allergens: list[Allergen]
     diet_tags: list[DietaryRestriction]
 

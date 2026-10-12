@@ -177,6 +177,8 @@ async def test_eval_diet_shows_what_each_code_step_fixes():
     assert first["repaired_calories"] is True
     assert first["repaired_protein"] is True
     assert first["repaired_portions"] is True
+    assert first["capped_calories"] is True
+    assert first["capped_portions"] is True
 
 
 async def test_eval_diet_does_no_arithmetic_on_a_plan_with_bad_foods():
@@ -236,3 +238,4 @@ async def test_report_shows_pass_rates_and_failures():
     assert "## Diet plans (1 profiles)" in report
     assert "| Protein at or above target | 0/1 | 0% |" in report
     assert "| Protein at or above target | 1/1 | 100% |" in report
+    assert "after the code also caps oversized portions" in report

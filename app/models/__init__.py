@@ -3,6 +3,7 @@
 from app.models.diet_plan import DietPlan, DietPlanMeal, DietPlanMealItem
 from app.models.exercise import Exercise
 from app.models.food import Food
+from app.models.login_attempt import LoginAttempt
 from app.models.profile import Profile
 from app.models.progress import WeightLog, WorkoutLog
 from app.models.user import User
@@ -14,6 +15,7 @@ __all__ = [
     "DietPlanMealItem",
     "Exercise",
     "Food",
+    "LoginAttempt",
     "Profile",
     "User",
     "WeightLog",

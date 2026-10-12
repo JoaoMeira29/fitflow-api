@@ -1,8 +1,11 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from app.core.config import settings
 from app.core.security import create_access_token
+from app.models.login_attempt import LoginAttempt
 from app.models.user import User
 
 CREDENTIALS = {"email": "ana@example.com", "password": "correct horse battery"}
@@ -137,6 +140,114 @@ async def test_login_gives_the_same_error_for_unknown_email(client):
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect email or password"
+
+
+# --- Login rate limit ------------------------------------------------------
+
+WRONG = {**CREDENTIALS, "password": "definitely the wrong one"}
+
+
+async def fail_login(client, times: int, email: str = CREDENTIALS["email"]):
+    for _ in range(times):
+        response = await client.post("/auth/login", json={**WRONG, "email": email})
+        assert response.status_code == 401
+
+
+async def test_login_is_refused_after_five_wrong_passwords(client):
+    await register(client)
+    await fail_login(client, 5)
+
+    response = await client.post("/auth/login", json=WRONG)
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == (
+        "Too many failed login attempts. Try again later."
+    )
+    # About 15 minutes, in seconds.
+    assert 890 <= int(response.headers["Retry-After"]) <= 900
+
+
+async def test_the_right_password_is_refused_too_while_locked(client):
+    await register(client)
+    await fail_login(client, 5)
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 429
+
+
+async def test_four_wrong_passwords_do_not_lock_the_account(client):
+    await register(client)
+    await fail_login(client, 4)
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 200
+
+
+async def test_a_successful_login_resets_the_count(client, db_session):
+    await register(client)
+    await fail_login(client, 4)
+    await client.post("/auth/login", json=CREDENTIALS)
+
+    # Four more failures would lock the account if the first four still counted.
+    await fail_login(client, 4)
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 200
+    assert await db_session.scalar(select(func.count()).select_from(LoginAttempt)) == 0
+
+
+async def test_failures_older_than_the_window_do_not_count(client, db_session):
+    await register(client)
+    long_ago = datetime.now(UTC) - timedelta(minutes=16)
+    db_session.add_all(
+        LoginAttempt(email=CREDENTIALS["email"], attempted_at=long_ago)
+        for _ in range(5)
+    )
+    await db_session.commit()
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 200
+
+
+async def test_the_limit_is_per_email(client):
+    await register(client)
+    await fail_login(client, 5, email="someone-else@example.com")
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 200
+
+
+async def test_an_unknown_email_is_limited_the_same_way(client):
+    await fail_login(client, 5, email="nobody@example.com")
+
+    response = await client.post(
+        "/auth/login", json={**WRONG, "email": "nobody@example.com"}
+    )
+
+    assert response.status_code == 429
+
+
+async def test_the_limit_ignores_the_case_of_the_email(client):
+    await register(client)
+    await fail_login(client, 5, email="ANA@example.com")
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 429
+
+
+async def test_the_limit_comes_from_the_settings(client, monkeypatch):
+    monkeypatch.setattr(settings, "LOGIN_MAX_ATTEMPTS", 2)
+    await register(client)
+    await fail_login(client, 2)
+
+    response = await client.post("/auth/login", json=CREDENTIALS)
+
+    assert response.status_code == 429
 
 
 # --- GET /auth/me ----------------------------------------------------------

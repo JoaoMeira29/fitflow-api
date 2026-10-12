@@ -58,12 +58,17 @@ DIET_RAW_CHECKS = [
 DIET_SCALED_CHECKS = [
     ("scaled_calories", "Calories within 5% of target"),
     ("scaled_protein", "Protein at or above target"),
-    ("scaled_portions", "Every portion between 5 g and 600 g"),
+    ("scaled_portions", "Every portion a sensible size"),
 ]
 DIET_REPAIRED_CHECKS = [
     ("repaired_calories", "Calories within 5% of target"),
     ("repaired_protein", "Protein at or above target"),
-    ("repaired_portions", "Every portion between 5 g and 600 g"),
+    ("repaired_portions", "Every portion a sensible size"),
+]
+DIET_CAPPED_CHECKS = [
+    ("capped_calories", "Calories within 5% of target"),
+    ("capped_protein", "Protein at or above target"),
+    ("capped_portions", "Every portion a sensible size"),
 ]
 
 
@@ -163,8 +168,11 @@ def _diet_first_answer(
     content: str, profile: ProfileRead, targets, foods_by_id
 ) -> dict[str, bool | None]:
     """Judge the model's first reply at each stage of the pipeline: as
-    written, after calorie scaling, and after the protein repair."""
-    numeric_checks = DIET_RAW_CHECKS + DIET_SCALED_CHECKS + DIET_REPAIRED_CHECKS
+    written, after calorie scaling, after the protein repair, and after
+    oversized portions are capped."""
+    numeric_checks = (
+        DIET_RAW_CHECKS + DIET_SCALED_CHECKS + DIET_REPAIRED_CHECKS + DIET_CAPPED_CHECKS
+    )
     try:
         raw = DietPlanDraft.model_validate_json(content)
     except ValidationError:
@@ -199,7 +207,14 @@ def _diet_first_answer(
 
     scaled = diet_plans.rescale_to_calories(raw, foods_by_id, targets.calories)
     repaired = diet_plans.rebalance_for_protein(scaled, foods_by_id, targets.protein_g)
-    for prefix, plan in (("raw", raw), ("scaled", scaled), ("repaired", repaired)):
+    capped = diet_plans.cap_portions(repaired, foods_by_id)
+    stages = (
+        ("raw", raw),
+        ("scaled", scaled),
+        ("repaired", repaired),
+        ("capped", capped),
+    )
+    for prefix, plan in stages:
         broken = broken_targets(plan)
         results[f"{prefix}_calories"] = diet_plans.RULE_CALORIES not in broken
         results[f"{prefix}_protein"] = diet_plans.RULE_PROTEIN not in broken
@@ -333,6 +348,10 @@ def render_report(
         lines += _table(
             "The same answer after the code also repairs protein",
             _check_rows(diet, DIET_REPAIRED_CHECKS),
+        )
+        lines += _table(
+            "The same answer after the code also caps oversized portions",
+            _check_rows(diet, DIET_CAPPED_CHECKS),
         )
         lines += _outcome_lines(diet)
     return "\n".join(lines).rstrip() + "\n"

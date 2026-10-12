@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Login rate limit: after this many wrong passwords for one email inside
+    # the window, login is refused until the oldest of them is outside it.
+    LOGIN_MAX_ATTEMPTS: int = 5
+    LOGIN_ATTEMPT_WINDOW_MINUTES: int = 15
+
     # Safety limits for calorie targets.
     MIN_DAILY_CALORIES_MALE: int = 1500
     MIN_DAILY_CALORIES_FEMALE: int = 1200

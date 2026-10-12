@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from app.core.diet_plans import (
     MEAL_CALORIE_SHARES,
     allowed_foods,
+    cap_portions,
     food_nutrients,
     is_high_protein,
     meal_nutrients,
@@ -53,6 +54,11 @@ FOODS = {
 }
 
 
+# The largest sensible portion of the foods that have a small one, in grams.
+# The other foods get 600 g, which no test plan reaches by accident.
+MAX_PORTIONS = {"Peanut butter": 40}
+
+
 @pytest.fixture
 async def catalog(db_session) -> dict[str, Food]:
     foods = [
@@ -63,6 +69,7 @@ async def catalog(db_session) -> dict[str, Food]:
             protein_per_100g=protein,
             carbs_per_100g=carbs,
             fat_per_100g=fat,
+            max_portion_g=MAX_PORTIONS.get(name, 600),
             allergens=allergens,
             diet_tags=diet_tags,
         )
@@ -388,6 +395,77 @@ def test_rebalance_cannot_fix_a_plan_without_protein_sources(catalog):
     assert rebalance_for_protein(scaled, by_id(catalog), 100) is scaled
 
 
+# --- cap_portions ----------------------------------------------------------
+
+
+def grams_of(plan: DietPlanDraft, meal_index: int) -> list[float]:
+    return [item.grams for item in plan.meals[meal_index].items]
+
+
+def test_cap_brings_a_portion_down_to_its_limit_and_keeps_the_calories(catalog):
+    # 100 g of peanut butter is far above its 40 g limit.
+    plan = draft_of(plan_json(meal(catalog, "snack", Peanut_butter=100, Banana=100)))
+    before = meal_nutrients(plan.meals[0].items, by_id(catalog)).kcal
+
+    capped = cap_portions(plan, by_id(catalog))
+
+    peanut_butter, banana = grams_of(capped, 0)
+    assert peanut_butter == 40
+    assert banana > 100  # the banana makes up the calories
+    after = meal_nutrients(capped.meals[0].items, by_id(catalog)).kcal
+    assert after == pytest.approx(before, abs=3)
+
+
+def test_cap_leaves_a_plan_without_oversized_portions_alone(catalog):
+    plan = draft_of(valid_plan(catalog))
+
+    capped = cap_portions(plan, by_id(catalog))
+
+    assert capped.meals == plan.meals
+
+
+def test_cap_only_changes_the_meal_with_the_oversized_portion(catalog):
+    plan = draft_of(
+        plan_json(
+            meal(catalog, "lunch", Chicken_breast=200, White_rice=150),
+            meal(catalog, "snack", Peanut_butter=100, Banana=100),
+        )
+    )
+
+    capped = cap_portions(plan, by_id(catalog))
+
+    assert grams_of(capped, 0) == [200, 150]
+    assert grams_of(capped, 1)[0] == 40
+
+
+def test_cap_repeats_when_the_extra_pushes_another_food_over(catalog):
+    # 500 g of peanut butter is 2940 kcal. Capped to 40 g, the banana would
+    # need over 3 kg to make that up, far beyond its own 600 g limit.
+    plan = draft_of(plan_json(meal(catalog, "snack", Peanut_butter=500, Banana=100)))
+
+    capped = cap_portions(plan, by_id(catalog))
+
+    assert grams_of(capped, 0) == [40, 600]
+
+
+def test_a_plan_capped_at_every_food_fails_validation_on_calories(catalog):
+    plan = draft_of(
+        plan_json(
+            meal(catalog, "breakfast", Egg=100, Oats=40),
+            meal(catalog, "lunch", Chicken_breast=200, White_rice=150),
+            meal(catalog, "dinner", Salmon=150, White_rice=150),
+            meal(catalog, "snack", Peanut_butter=500, Banana=100),
+        )
+    )
+    target = round(plan_nutrients(plan, by_id(catalog)).kcal)
+
+    capped = cap_portions(plan, by_id(catalog))
+
+    errors = check_targets(catalog, capped, kcal=target, protein=10)
+    assert len(errors) == 1
+    assert "must be within 5%" in errors[0]
+
+
 # --- validate_targets ------------------------------------------------------
 
 
@@ -441,8 +519,8 @@ def test_a_portion_over_the_limit_is_an_error(catalog):
     errors = check_targets(catalog, draft_of(plan), kcal=1490, protein=50)
 
     assert errors == [
-        "lunch: 700 g of 'Broccoli' is more than 600 g. Add other foods to the "
-        "meal or use foods with more calories."
+        "lunch: 700 g of 'Broccoli' is more than a sensible portion of 600 g. "
+        "Add other foods to the meal or use foods with more calories."
     ]
 
 
@@ -739,6 +817,26 @@ async def test_post_stores_the_targets_and_a_profile_snapshot(
     assert plan.target_kcal == targets["calories"]
     assert plan.target_protein_g == targets["protein_g"]
     assert plan.profile_snapshot == PROFILE
+
+
+async def test_post_caps_an_oversized_portion_in_code_without_a_retry(
+    client, auth_headers, catalog, targets, fake_llm
+):
+    plan = json.loads(valid_plan(catalog))
+    # A snack that is nearly all peanut butter.
+    plan["meals"][3] = meal(catalog, "snack", Peanut_butter=100, Banana=20)
+    fake_llm.replies = [json.dumps(plan)]
+
+    response = await client.post("/plans/diet", headers=auth_headers)
+
+    assert response.status_code == 201
+    assert len(fake_llm.calls) == 1
+    body = response.json()
+    snack = body["meals"][3]
+    assert snack["items"][0]["food"]["name"] == "Peanut butter"
+    assert snack["items"][0]["grams"] <= 40
+    assert snack["totals"]["kcal"] == pytest.approx(0.10 * targets["calories"], abs=5)
+    assert body["totals"]["kcal"] == pytest.approx(targets["calories"], abs=15)
 
 
 async def test_post_repairs_low_protein_in_code_without_a_retry(

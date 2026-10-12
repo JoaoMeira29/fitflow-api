@@ -34,9 +34,9 @@ NUTRITION_TOOL_NAME = "calculate_nutrition"
 
 # Daily calories may differ from the target by at most this share.
 CALORIE_TOLERANCE = 0.05
-# Limits for one food in one meal, after scaling.
+# The smallest portion of any food in a meal, after scaling. The largest is
+# set per food in the catalog (max_portion_g): 20 g for honey, 300 g for meat.
 MIN_PORTION_GRAMS = 5
-MAX_PORTION_GRAMS = 600
 
 # A food counts as a protein source with at least this much protein per
 # 100 g and at least this share of its calories from protein. Both are needed:
@@ -320,6 +320,67 @@ def rebalance_for_protein(
     return DietPlanDraft.model_construct(meals=meals)
 
 
+def cap_portions(
+    draft: DietPlanDraft, foods_by_id: Mapping[uuid.UUID, Food]
+) -> DietPlanDraft:
+    """Bring every portion down to its food's largest sensible portion,
+    without changing a meal's calories.
+
+    A food above its limit is set to the limit, and the calories it gave up
+    are spread over the meal's other foods. That can push another food over
+    its own limit, so the step repeats until nothing is over. If every food
+    in a meal reaches its limit, the meal ends up short of calories and
+    validation reports it."""
+    meals = []
+    for meal in draft.meals:
+        grams = {item.food_id: item.grams for item in meal.items}
+        limits = {
+            item.food_id: foods_by_id[item.food_id].max_portion_g
+            for item in meal.items
+        }
+        if all(grams[food_id] <= limits[food_id] for food_id in grams):
+            meals.append(meal)
+            continue
+
+        def kcal(food_ids) -> float:
+            return sum(
+                food_nutrients(foods_by_id[food_id], grams[food_id]).kcal
+                for food_id in food_ids
+            )
+
+        meal_kcal = kcal(grams)
+        capped: set[uuid.UUID] = set()
+        # Each pass caps at least one more food, so this always ends.
+        for _ in grams:
+            over = [f for f in grams if f not in capped and grams[f] > limits[f]]
+            if not over:
+                break
+            for food_id in over:
+                grams[food_id] = limits[food_id]
+                capped.add(food_id)
+            free = [food_id for food_id in grams if food_id not in capped]
+            free_kcal = kcal(free)
+            if free_kcal <= 0:
+                break
+            factor = (meal_kcal - kcal(capped)) / free_kcal
+            for food_id in free:
+                grams[food_id] *= factor
+
+        meals.append(
+            DietMealDraft.model_construct(
+                meal_type=meal.meal_type,
+                items=[
+                    DietItemDraft.model_construct(
+                        food_id=item.food_id,
+                        grams=float(max(1, round(grams[item.food_id]))),
+                    )
+                    for item in meal.items
+                ],
+            )
+        )
+    return DietPlanDraft.model_construct(meals=meals)
+
+
 def validate_targets(
     draft: DietPlanDraft,
     *,
@@ -354,14 +415,16 @@ def validate_targets(
 
     for meal in draft.meals:
         for item in meal.items:
-            name = foods_by_id[item.food_id].name
-            if item.grams > MAX_PORTION_GRAMS:
+            food = foods_by_id[item.food_id]
+            name = food.name
+            if item.grams > food.max_portion_g:
                 issues.append(
                     Issue(
                         RULE_PORTIONS,
                         f"{meal.meal_type}: {round(item.grams)} g of '{name}' "
-                        f"is more than {MAX_PORTION_GRAMS} g. Add other foods "
-                        "to the meal or use foods with more calories.",
+                        f"is more than a sensible portion of {food.max_portion_g:g} "
+                        "g. Add other foods to the meal or use foods with more "
+                        "calories.",
                     )
                 )
             elif item.grams < MIN_PORTION_GRAMS:
@@ -521,6 +584,7 @@ async def generate_diet_plan(
 
         scaled = rescale_to_calories(draft, foods_by_id, targets.calories)
         scaled = rebalance_for_protein(scaled, foods_by_id, targets.protein_g)
+        scaled = cap_portions(scaled, foods_by_id)
         issues = validate_targets(
             scaled,
             foods_by_id=foods_by_id,

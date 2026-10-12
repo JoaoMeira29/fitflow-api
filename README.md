@@ -42,6 +42,7 @@
 - [Interactive Docs](#interactive-docs)
 - [Running Tests](#running-tests)
 - [Continuous Integration](#continuous-integration)
+- [Catalog Data](#catalog-data)
 - [Eval Results](#eval-results)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -54,7 +55,7 @@ A user creates a profile: goal, age, sex, weight, height, activity level, traini
 
 | Feature            | Description                                                         | Status      |
 | ------------------ | ------------------------------------------------------------------- | ----------- |
-| **Authentication** | Sign up and log in with JWT tokens                                  | Available   |
+| **Authentication** | Sign up and log in with JWT tokens, with a login rate limit         | Available   |
 | **Profile**        | The user's goal, body data, equipment, allergies and restrictions   | Available   |
 | **Catalogs**       | Exercises and foods the plans are built from, with filters          | Available   |
 | **Targets**        | Daily calories and macros, computed in code                         | Available   |
@@ -73,7 +74,7 @@ The LLM is one component inside a pipeline the code controls.
 1. **The LLM chooses, the code calculates.** Calorie and macro targets come from plain Python functions (Mifflin-St Jeor plus an activity multiplier) with unit tests. The model never does arithmetic.
 2. **Catalog only.** The model may only use exercises and foods from FitFlow's own catalogs, referenced by ID.
 3. **Structured output.** Model output is parsed into Pydantic models.
-4. **Every plan is validated in code.** IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target. On failure the errors go back to the model, for at most 2 retries.
+4. **Every plan is validated in code.** IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target, every portion a sensible size. The code first repairs what it can (portions, protein); what it cannot repair goes back to the model, for at most 2 retries.
 5. **One LLM wrapper.** Every model call goes through `app/core/llm.py`, with a timeout, retries, and logging of latency and token usage.
 6. **Safety.** A minimum calorie floor, a cap on weekly weight change, no users under 18, and a "not medical advice" notice in every plan.
 
@@ -162,7 +163,9 @@ fitflow-api/
 ├── docker-compose.yml    # PostgreSQL, and optionally the API, in containers
 ├── Dockerfile            # The API as a container image
 ├── pytest.ini            # Pytest configuration
-├── requirements.txt      # Project dependencies
+├── requirements.txt      # The app's dependencies (what the Docker image installs)
+├── requirements-dev.txt  # The same plus the test tools (what you install)
+├── LICENSE               # MIT license
 ├── .env.example          # Environment variables template
 └── .env                  # Environment variables (not committed)
 ```
@@ -199,7 +202,7 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 **3. Install dependencies**
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 **4. Set up environment variables**
@@ -387,6 +390,8 @@ kubectl port-forward service/fitflow-api 8000:80
 | `DATABASE_URL`                | PostgreSQL connection (asyncpg driver) | `postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow` |
 | `JWT_SECRET`                  | Secret key used to sign JWT tokens     | `a-long-random-string`                                        |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime, in minutes      | `30`                                                          |
+| `LOGIN_MAX_ATTEMPTS`          | Wrong passwords allowed per email inside the window (optional) | `5`                                   |
+| `LOGIN_ATTEMPT_WINDOW_MINUTES` | Length of that window, in minutes (optional) | `15`                                                   |
 | `MIN_DAILY_CALORIES_MALE`     | Lowest calorie target for men, in kcal (optional)   | `1500`                                           |
 | `MIN_DAILY_CALORIES_FEMALE`   | Lowest calorie target for women, in kcal (optional) | `1200`                                           |
 | `MAX_WEEKLY_WEIGHT_CHANGE_PERCENT` | Largest weekly weight change, as % of body weight (optional) | `1.0`                              |
@@ -414,7 +419,8 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | Method | Route               | Description                        | Auth | Status                                                                     |
 | :----: | ------------------- | ---------------------------------- | :--: | -------------------------------------------------------------------------- |
 | `GET`  | `/`                 | Welcome message                    | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
-| `GET`  | `/health`           | API health check                   | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/health`           | The API process is up              | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/health/ready`     | The API can reach the database     | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `POST` | `/auth/register`    | Create an account                  | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `POST` | `/auth/login`       | Get an access token                | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/auth/me`          | The logged-in user                 | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
@@ -485,9 +491,21 @@ Each run writes a Markdown report to `tests/evals/results/`, named after the dat
 
 ---
 
+## Catalog Data
+
+The plans can only use what is in two catalogs, kept as JSON in [app/data/](app/data/):
+
+- **98 exercises**, each with a muscle group and the equipment it needs.
+- **197 foods**, per 100 g. For 176 of them the calories and macros come from the [USDA FoodData Central](https://fdc.nal.usda.gov/) SR Legacy dataset, which is in the public domain; each entry names the USDA food it was taken from. The other 21 have no close match there (for example skyr, seitan and salted cod) and are marked `estimate`.
+- Every food also has a **largest sensible portion**, from 15 g for garlic to 500 g for potatoes. These limits are my own judgement, not from a dataset. A diet plan never goes above them: the code caps the portion and gives the calories to the meal's other foods.
+
+---
+
 ## Eval Results
 
 Latest run: `qwen2.5:7b` on a local GPU, 30 profiles, 12 October 2026, with tools off. The full reports are in [tests/evals/results/](tests/evals/results/).
+
+> These numbers are from before two later changes: food values taken from the USDA dataset, and a largest portion per food. The evals have not been re-run since, so the current figures may differ.
 
 | Result                                   | Workout plans | Diet plans  |
 | ---------------------------------------- | :-----------: | :---------: |
@@ -542,7 +560,7 @@ The full plan (design rules, how a plan is generated, the data model and every p
 
 ## License
 
-Distributed under the **MIT** license.
+Distributed under the **MIT** license. See [LICENSE](LICENSE).
 
 <div align="center">
 

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from sqlalchemy import func, select
 
@@ -5,7 +7,7 @@ from app.models.exercise import Exercise
 from app.models.food import Food
 from app.schemas.exercise import ExerciseBase
 from app.schemas.food import FoodBase
-from app.seed import load_catalog, seed_catalogs
+from app.seed import DATA_DIR, load_catalog, seed_catalogs
 
 # --- Catalog data files ----------------------------------------------------
 # load_catalog validates every row against its schema, so a bad choice or an
@@ -38,6 +40,27 @@ def test_food_calories_match_their_macros():
         difference = abs(food.kcal_per_100g - from_macros)
         # Fibre and rounding explain small gaps; anything larger is a typo.
         assert difference <= 20 or difference <= 0.15 * food.kcal_per_100g, food.name
+
+
+def test_most_food_values_come_from_the_usda_dataset():
+    rows = json.loads((DATA_DIR / "foods.json").read_text(encoding="utf-8"))
+
+    sources = [row["source"] for row in rows]
+    from_usda = [source for source in sources if source.startswith("USDA SR Legacy: ")]
+    assert set(sources) - set(from_usda) == {"estimate"}
+    assert len(from_usda) >= 170
+
+
+def test_every_food_has_a_sensible_largest_portion():
+    foods = {food.name: food for food in load_catalog("foods.json", FoodBase)}
+
+    assert all(5 < food.max_portion_g <= 600 for food in foods.values())
+    # Things eaten by the spoonful have a small limit; staples a large one.
+    assert foods["Honey"].max_portion_g == 20
+    assert foods["Olive oil"].max_portion_g == 20
+    assert foods["Almonds"].max_portion_g == 50
+    assert foods["Chicken breast, raw"].max_portion_g == 300
+    assert foods["White rice, cooked"].max_portion_g == 400
 
 
 def test_food_diet_tags_are_consistent_with_allergens():
@@ -250,6 +273,7 @@ async def foods(db_session):
             protein_per_100g=10,
             carbs_per_100g=10,
             fat_per_100g=2,
+            max_portion_g=300,
             allergens=allergens,
             diet_tags=diet_tags,
         )
@@ -284,6 +308,7 @@ async def test_foods_are_listed_by_name(client, auth_headers, foods):
         "protein_per_100g": 10,
         "carbs_per_100g": 10,
         "fat_per_100g": 2,
+        "max_portion_g": 300,
         "allergens": ["fish"],
         "diet_tags": ["pescatarian"],
     }

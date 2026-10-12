@@ -18,6 +18,9 @@ class Food(Base):
     protein_per_100g: Mapped[float]
     carbs_per_100g: Mapped[float]
     fat_per_100g: Mapped[float]
+    # The largest portion of this food that makes sense in one meal, in
+    # grams: 20 for honey, 300 for meat. Diet plans never go above it.
+    max_portion_g: Mapped[float]
     allergens: Mapped[list[str]] = mapped_column(ARRAY(String(32)))
     # The diets this food is suitable for, e.g. lentils carry all three tags
     # and chicken carries none.

@@ -28,15 +28,17 @@ spec:
                 name: fitflow-config
             - secretRef:
                 name: fitflow-secrets
-          # Ready: the pod may receive requests. Until this passes, the
-          # Service sends it no traffic.
+          # Ready: the pod can reach the database, so it may receive requests.
+          # Until this passes, the Service sends it no traffic.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 3
             periodSeconds: 5
           # Live: if this keeps failing, Kubernetes restarts the container.
+          # It does not check the database: restarting the API would not fix
+          # a database that is down.
           livenessProbe:
             httpGet:
               path: /health
