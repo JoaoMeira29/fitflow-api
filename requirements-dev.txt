@@ -1,0 +1,6 @@
+# Everything needed to develop and test: the app's own dependencies, plus the
+# test tools. The Docker image installs only requirements.txt.
+-r requirements.txt
+
+pytest>=9.1.1
+pytest-asyncio>=1.4.0

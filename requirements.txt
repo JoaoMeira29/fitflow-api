@@ -14,11 +14,8 @@ alembic>=1.20.0
 pyjwt>=2.15.1
 argon2-cffi>=25.1.0
 
-# LLM (httpx talks to Ollama, and the tests use it too; anthropic is the
-# official SDK for Claude)
+# LLM (httpx talks to Ollama; anthropic is the official SDK for Claude)
 httpx>=0.28.1
 anthropic>=1.13.0
 
-# Tests
-pytest>=9.1.1
-pytest-asyncio>=1.4.0
+# The test tools are in requirements-dev.txt.
