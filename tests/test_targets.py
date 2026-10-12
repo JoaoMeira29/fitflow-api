@@ -187,9 +187,9 @@ def test_requested_calories_replace_the_goal_based_target():
 
     assert targets.calories == 1700
     assert targets.tdee == 2103  # maintenance is still reported
-    assert targets.protein_g == 165  # protein still follows body weight
+    assert targets.protein_g == 149  # 165 g by body weight, capped at 35%
     assert targets.fat_g == 47  # 25% of 1700 kcal / 9
-    assert targets.carbs_g == 154
+    assert targets.carbs_g == 170
     assert targets.calorie_floor_applied is False
     assert targets.weight_change_cap_applied is False
 
@@ -244,13 +244,28 @@ def test_macros_add_up_to_the_calorie_target(calories, weight_kg, goal):
     assert abs(total - calories) <= 4
 
 
-def test_protein_is_limited_to_the_calories_left_after_fat():
-    # 2.0 g per kg would be 600 g (2400 kcal), more than the whole target.
-    protein_g, carbs_g, fat_g = calculate_macros(1200, 300, Goal.LOSE_WEIGHT)
+def test_protein_is_capped_at_35_percent_of_calories():
+    # 2.0 g per kg would be 144 g, which is 48% of 1200 kcal.
+    protein_g, carbs_g, fat_g = calculate_macros(1200, 72, Goal.LOSE_WEIGHT)
 
+    assert protein_g == 105  # 35% of 1200 kcal / 4
     assert fat_g == 33
-    assert protein_g == 226  # the 903 kcal left after fat, not 600 g
-    assert carbs_g == 0
+    assert carbs_g == 121  # (1200 - 105 * 4 - 33 * 9) / 4
+
+
+def test_protein_below_the_cap_is_not_changed():
+    # 160 g is 32% of 2000 kcal, under the 35% cap of 175 g.
+    protein_g, _, _ = calculate_macros(2000, 80, Goal.LOSE_WEIGHT)
+
+    assert protein_g == 160
+
+
+def test_the_protein_cap_grows_with_the_calories():
+    low, _, _ = calculate_macros(1500, 120, Goal.LOSE_WEIGHT)
+    high, _, _ = calculate_macros(2500, 120, Goal.LOSE_WEIGHT)
+
+    assert low == 131  # 35% of 1500 kcal / 4
+    assert high == 219  # 35% of 2500 kcal / 4, still under 240 g
 
 
 # --- calculate_targets -----------------------------------------------------

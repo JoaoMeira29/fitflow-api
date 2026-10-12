@@ -31,6 +31,8 @@ PROTEIN_G_PER_KG = {
     Goal.GAIN_MUSCLE: 2.0,
 }
 FAT_SHARE_OF_CALORIES = 0.25
+# Protein never takes more than this share of the day's calories.
+MAX_PROTEIN_SHARE_OF_CALORIES = 0.35
 
 KCAL_PER_G_PROTEIN = 4
 KCAL_PER_G_CARBS = 4
@@ -119,19 +121,20 @@ def allowed_calorie_range(
 
 
 def calculate_macros(calories: int, weight_kg: float, goal: Goal) -> tuple[int, int, int]:
-    """Return (protein_g, carbs_g, fat_g). Protein follows body weight, fat is
-    a fixed share of calories, and carbs take whatever calories are left."""
+    """Return (protein_g, carbs_g, fat_g). Protein follows body weight, up to
+    a cap; fat is a fixed share of calories; carbs take the calories left."""
     fat_g = round(calories * FAT_SHARE_OF_CALORIES / KCAL_PER_G_FAT)
-    calories_left = calories - fat_g * KCAL_PER_G_FAT
 
-    # Protein cannot use more calories than are left after fat. This only
-    # matters for a very heavy person on a very low calorie target.
-    protein_g = round(
-        min(PROTEIN_G_PER_KG[goal] * weight_kg, calories_left / KCAL_PER_G_PROTEIN)
+    # Protein by body weight asks too much of a heavy person on few calories
+    # (the evals found targets of up to 48% of calories), so it is capped at
+    # a share of the day's calories.
+    protein_cap_g = calories * MAX_PROTEIN_SHARE_OF_CALORIES / KCAL_PER_G_PROTEIN
+    protein_g = round(min(PROTEIN_G_PER_KG[goal] * weight_kg, protein_cap_g))
+
+    calories_left = (
+        calories - fat_g * KCAL_PER_G_FAT - protein_g * KCAL_PER_G_PROTEIN
     )
-    calories_left -= protein_g * KCAL_PER_G_PROTEIN
-
-    carbs_g = max(0, round(calories_left / KCAL_PER_G_CARBS))
+    carbs_g = round(calories_left / KCAL_PER_G_CARBS)
     return protein_g, carbs_g, fat_g
 
 
