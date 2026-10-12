@@ -123,7 +123,9 @@ fitflow-api/
 │   ├── core/
 │   │   ├── config.py     # Settings, read from .env
 │   │   ├── database.py   # SQLAlchemy engine, sessions and Base
-│   │   └── security.py   # Password hashing and JWT tokens
+│   │   └── security.py   # Password hashing, password blocklist and JWT tokens
+│   ├── data/
+│   │   └── common_passwords.txt  # Blocklist of common passwords
 │   ├── models/           # SQLAlchemy models (tables)
 │   ├── schemas/          # Pydantic schemas (requests and responses)
 │   └── main.py           # FastAPI entry point

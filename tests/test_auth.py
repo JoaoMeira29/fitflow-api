@@ -67,9 +67,34 @@ async def test_register_rejects_invalid_email(client):
 
 
 async def test_register_rejects_short_password(client):
-    response = await register(client, password="short")
+    response = await register(client, password="elevenchars")
 
     assert response.status_code == 422
+
+
+async def test_register_accepts_a_password_of_minimum_length(client):
+    response = await register(client, password="twelve chars")
+
+    assert response.status_code == 201
+
+
+async def test_register_rejects_too_long_password(client):
+    response = await register(client, password="x" * 41)
+
+    assert response.status_code == 422
+
+
+async def test_register_accepts_a_password_of_maximum_length(client):
+    response = await register(client, password="correct horse " * 2 + "battery here")
+
+    assert response.status_code == 201
+
+
+async def test_register_rejects_common_password(client):
+    response = await register(client, password="Password1234")
+
+    assert response.status_code == 422
+    assert "too common" in response.json()["detail"][0]["msg"]
 
 
 # --- POST /auth/login ------------------------------------------------------

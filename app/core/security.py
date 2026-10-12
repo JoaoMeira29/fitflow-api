@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
 
 import jwt
 from argon2 import PasswordHasher
@@ -8,7 +10,27 @@ from app.core.config import settings
 
 JWT_ALGORITHM = "HS256"
 
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_MAX_LENGTH = 40
+
+# Passwords of PASSWORD_MIN_LENGTH or more characters from the SecLists
+# "xato-net-10-million-passwords-1000000" list, lowercased, one per line.
+_COMMON_PASSWORDS_FILE = (
+    Path(__file__).resolve().parent.parent / "data" / "common_passwords.txt"
+)
+
 _password_hasher = PasswordHasher()
+
+
+@lru_cache
+def _common_passwords() -> frozenset[str]:
+    return frozenset(_COMMON_PASSWORDS_FILE.read_text(encoding="utf-8").splitlines())
+
+
+def is_common_password(password: str) -> bool:
+    """True if the password is on the common-password blocklist. The check
+    ignores case, so "Password1234" is caught by "password1234"."""
+    return password.casefold() in _common_passwords()
 
 
 def hash_password(password: str) -> str:

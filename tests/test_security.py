@@ -9,6 +9,7 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     hash_password,
+    is_common_password,
     verify_password,
 )
 
@@ -41,6 +42,18 @@ def test_verify_password_rejects_the_wrong_password():
 
 def test_verify_password_rejects_a_malformed_hash():
     assert verify_password("anything", "not-a-real-hash") is False
+
+
+def test_common_password_is_detected():
+    assert is_common_password("password1234") is True
+
+
+def test_common_password_check_ignores_case():
+    assert is_common_password("PassWord1234") is True
+
+
+def test_uncommon_password_is_not_flagged():
+    assert is_common_password("correct horse battery") is False
 
 
 def test_token_round_trip_returns_the_subject():
