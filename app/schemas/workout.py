@@ -45,6 +45,8 @@ class WorkoutPlanExerciseRead(BaseModel):
 class WorkoutPlanDayRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # Needed to log the day as completed with POST /progress/workouts.
+    id: uuid.UUID
     day_index: int
     focus: str
     exercises: list[WorkoutPlanExerciseRead]

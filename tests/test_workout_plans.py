@@ -209,6 +209,22 @@ async def test_post_creates_and_returns_the_plan(
     assert first["exercise"]["id"] == str(catalog["Push-up"].id)
 
 
+async def test_a_day_from_the_plan_can_be_logged_as_completed(
+    client, auth_headers, catalog, profile, fake_llm
+):
+    fake_llm.replies = [valid_plan(catalog)]
+    plan = (await client.post("/plans/workout", headers=auth_headers)).json()
+
+    # Only what the API returned is used: the id of the plan's first day.
+    day_id = plan["days"][0]["id"]
+    response = await client.post(
+        "/progress/workouts", json={"plan_day_id": day_id}, headers=auth_headers
+    )
+
+    assert response.status_code == 201
+    assert response.json()["plan_day_id"] == day_id
+
+
 async def test_post_only_offers_exercises_the_user_can_do(
     client, auth_headers, catalog, profile, fake_llm
 ):
