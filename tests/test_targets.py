@@ -5,7 +5,9 @@ from app.core.targets import (
     KCAL_PER_G_CARBS,
     KCAL_PER_G_FAT,
     KCAL_PER_G_PROTEIN,
+    CalorieTargetError,
     SafetyLimits,
+    allowed_calorie_range,
     calculate_bmr,
     calculate_macros,
     calculate_target_calories,
@@ -150,6 +152,64 @@ def test_weight_gain_is_capped_by_the_weekly_rate():
 
     assert calories == 3088
     assert cap is True
+
+
+# --- A calorie target chosen by the user -----------------------------------
+
+
+def test_allowed_range_is_maintenance_plus_or_minus_the_weekly_cap():
+    # 1% of 80 kg a week allows 880 kcal a day either way.
+    assert allowed_calorie_range(2500, Sex.MALE, 80, LIMITS) == (1620, 3380)
+
+
+def test_allowed_range_never_goes_below_the_calorie_floor():
+    # 2000 - 880 would be 1120, below the 1500 kcal floor for men.
+    assert allowed_calorie_range(2000, Sex.MALE, 80, LIMITS) == (1500, 2880)
+
+
+def test_allowed_range_uses_the_floor_for_women():
+    assert allowed_calorie_range(1500, Sex.FEMALE, 60, LIMITS) == (1200, 2160)
+
+
+PROFILE = dict(
+    sex=Sex.MALE,
+    age=28,
+    weight_kg=82.5,
+    height_cm=170,
+    activity_level=ActivityLevel.SEDENTARY,
+    goal=Goal.LOSE_WEIGHT,
+    limits=LIMITS,
+)
+
+
+def test_requested_calories_replace_the_goal_based_target():
+    targets = calculate_targets(**PROFILE, requested_calories=1700)
+
+    assert targets.calories == 1700
+    assert targets.tdee == 2103  # maintenance is still reported
+    assert targets.protein_g == 165  # protein still follows body weight
+    assert targets.fat_g == 47  # 25% of 1700 kcal / 9
+    assert targets.carbs_g == 154
+    assert targets.calorie_floor_applied is False
+    assert targets.weight_change_cap_applied is False
+
+
+def test_requested_calories_below_the_floor_are_rejected():
+    with pytest.raises(CalorieTargetError, match="between 1500 and 3010 kcal"):
+        calculate_targets(**PROFILE, requested_calories=1499)
+
+
+def test_requested_calories_beyond_the_weekly_cap_are_rejected():
+    # Moderately active, maintenance is 2716 kcal; 1% a week allows 907 less.
+    profile = {**PROFILE, "activity_level": ActivityLevel.MODERATE}
+
+    with pytest.raises(CalorieTargetError, match="between 1809 and 3623 kcal"):
+        calculate_targets(**profile, requested_calories=1700)
+
+
+def test_requested_calories_at_the_edges_are_accepted():
+    assert calculate_targets(**PROFILE, requested_calories=1500).calories == 1500
+    assert calculate_targets(**PROFILE, requested_calories=3010).calories == 3010
 
 
 # --- Macros ----------------------------------------------------------------

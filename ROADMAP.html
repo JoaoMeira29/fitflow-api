@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 3 of 8 done</strong>
-        <span>26 of 53 tasks done</span>
+        <strong>Phase 5 of 8 done</strong>
+        <span>42 of 54 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 49%"></div></div>
+      <div class="bar"><div style="width: 78%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -296,7 +296,7 @@ flowchart LR
       <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Generates and applies migrations, so the database schema is versioned in Git.</p></div>
       <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 hashes passwords; PyJWT signs and validates access tokens.</p></div>
       <div class="card tech"><h3>Targets calculator</h3><div class="where mono">app/core/targets.py</div><p>Pure functions that turn a profile into calorie and macro targets, with the safety limits applied.</p></div>
-      <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. The provider and model are not chosen yet.</p></div>
+      <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. It talks to a local model served by Ollama (<code>qwen2.5:7b</code> by default); the provider and model are settings.</p></div>
       <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/, tests/evals/</div><p>Regular tests run against a test database with the LLM mocked. Evals call the real model under a separate marker.</p></div>
       <div class="card tech"><h3>Docker Compose</h3><div class="where mono">docker-compose.yml</div><p>Starts PostgreSQL locally with one command.</p></div>
       <div class="card tech"><h3>GitHub Actions</h3><div class="where mono">.github/workflows/</div><p>Runs migrations and the regular test suite on every push.</p></div>
@@ -443,6 +443,7 @@ erDiagram
         uuid id PK
         uuid meal_id FK
         uuid food_id FK
+        int position
         float grams
     }
     WEIGHT_LOGS {
@@ -522,36 +523,37 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">4</div>
         <div class="card">
-          <div class="phase-head"><h3>LLM wrapper and workout plans</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>LLM wrapper and workout plans</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li>Choose the LLM provider and model</li>
-            <li><code>app/core/llm.py</code>: timeout, retries, logging of latency and token usage</li>
-            <li>Pydantic schema for the model's workout plan output</li>
-            <li>Validation: exercise IDs exist, equipment matches the profile, day count matches training days</li>
-            <li>Generate, validate and retry loop (at most 2 retries)</li>
-            <li>Workout plan tables and migration</li>
-            <li><code>POST /plans/workout</code>, <code>GET /plans/workout</code> and <code>GET /plans/workout/{id}</code></li>
-            <li>"Not medical advice" notice in plan responses</li>
-            <li>Tests with the LLM mocked</li>
+            <li class="done">Choose the LLM provider and model: Ollama with <code>qwen2.5:7b</code></li>
+            <li class="done"><code>app/core/llm.py</code>: timeout, retries, logging of latency and token usage</li>
+            <li class="done">Pydantic schema for the model's workout plan output</li>
+            <li class="done">Validation: exercise IDs exist, equipment matches the profile, day count matches training days</li>
+            <li class="done">Generate, validate and retry loop (at most 2 retries)</li>
+            <li class="done">Workout plan tables and migration</li>
+            <li class="done"><code>POST /plans/workout</code>, <code>GET /plans/workout</code> and <code>GET /plans/workout/{id}</code></li>
+            <li class="done">"Not medical advice" notice in plan responses</li>
+            <li class="done">Tests with the LLM mocked</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> a user gets a stored weekly workout plan that only uses catalog exercises they have the equipment for.</div>
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">5</div>
         <div class="card">
-          <div class="phase-head"><h3>Diet plans</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Diet plans</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li>Pydantic schema for the model's diet plan output (food IDs and grams)</li>
-            <li>Validation: food IDs exist, no allergens or restricted foods, calories within 5% of target, protein at or above target</li>
-            <li>Portion rescaling in code before a retry</li>
-            <li>Diet plan tables and migration</li>
-            <li><code>POST /plans/diet</code>, <code>GET /plans/diet</code> and <code>GET /plans/diet/{id}</code></li>
-            <li>Tests with the LLM mocked</li>
+            <li class="done">Pydantic schema for the model's diet plan output (food IDs and grams)</li>
+            <li class="done">Validation: food IDs exist, no allergens or restricted foods, calories within 5% of target, protein at or above target</li>
+            <li class="done">Portion rescaling in code: each meal is scaled to its share of the calorie target, then calories are moved towards its high-protein foods if protein is short</li>
+            <li class="done">Optional calorie target chosen by the user, checked against the safety limits</li>
+            <li class="done">Diet plan tables and migration</li>
+            <li class="done"><code>POST /plans/diet</code>, <code>GET /plans/diet</code> and <code>GET /plans/diet/{id}</code></li>
+            <li class="done">Tests with the LLM mocked</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> a user gets a stored daily meal plan that meets their targets and respects their allergies and restrictions.</div>
         </div>

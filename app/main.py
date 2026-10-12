@@ -3,7 +3,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, exercises, foods, profile
+from app.api import auth, diets, exercises, foods, profile, workouts
+
+# Show INFO logs from the app's own modules, such as the LLM wrapper's line
+# with latency and token usage. Uvicorn only configures its own loggers.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s: %(message)s")
 
 # Uvicorn's own logger, so the lines below show up with its startup messages.
 logger = logging.getLogger("uvicorn.error")
@@ -35,6 +39,8 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(exercises.router)
 app.include_router(foods.router)
+app.include_router(workouts.router)
+app.include_router(diets.router)
 
 
 @app.get("/", tags=["Root"])

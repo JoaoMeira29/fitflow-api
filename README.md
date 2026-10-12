@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
-![Phase](https://img.shields.io/badge/phase-3%20of%208%20done-blue?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-5%20of%208%20done-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
@@ -25,7 +25,7 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** Sign-up, login, user profiles, the exercise and food catalogs and calorie and macro targets work today. Workout and diet plan generation and evals are planned. See the [Roadmap](#roadmap).
+> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation work today. Evals, progress logging and deployment are planned. See the [Roadmap](#roadmap).
 
 ## Table of Contents
 
@@ -54,8 +54,8 @@ A user creates a profile: goal, age, sex, weight, height, activity level, traini
 | **Profile**        | The user's goal, body data, equipment, allergies and restrictions   | Available   |
 | **Catalogs**       | Exercises and foods the plans are built from, with filters          | Available   |
 | **Targets**        | Daily calories and macros, computed in code                         | Available   |
-| **Workout plans**  | A weekly plan built from the exercise catalog                       | Planned     |
-| **Diet plans**     | A daily meal plan built from the food catalog                       | Planned     |
+| **Workout plans**  | A weekly plan built from the exercise catalog                       | Available   |
+| **Diet plans**     | A daily meal plan built from the food catalog                       | Available   |
 | **Progress**       | Weight and workout logs that feed plan regeneration                 | Planned     |
 
 > FitFlow is a software project, not medical advice.
@@ -103,7 +103,7 @@ flowchart LR
 | Migrations           | Alembic                                      |
 | Authentication       | JWT (PyJWT), Argon2 password hashing         |
 | Data Validation      | Pydantic, pydantic-settings                  |
-| LLM                  | Provider-agnostic wrapper (provider not chosen yet) |
+| LLM                  | Local model served by Ollama, behind a provider-agnostic wrapper |
 | Testing              | Pytest, pytest-asyncio, HTTPX                |
 | Documentation        | OpenAPI (Swagger UI & ReDoc)                 |
 | Local Infrastructure | Docker Compose                               |
@@ -121,16 +121,22 @@ fitflow-api/
 │   ├── api/
 │   │   ├── auth.py       # Sign up, login, current user
 │   │   ├── deps.py       # Shared dependencies (database session, current user)
+│   │   ├── diets.py      # Generate and read diet plans
 │   │   ├── exercises.py  # Exercise catalog
 │   │   ├── foods.py      # Food catalog
-│   │   └── profile.py    # Profile and calorie and macro targets
+│   │   ├── profile.py    # Profile and calorie and macro targets
+│   │   └── workouts.py   # Generate and read workout plans
 │   ├── core/
 │   │   ├── age.py        # Age calculation and the minimum age
 │   │   ├── config.py     # Settings, read from .env
 │   │   ├── database.py   # SQLAlchemy engine, sessions and Base
+│   │   ├── diet_plans.py # Prompt, portion scaling and validation for diet plans
 │   │   ├── enums.py      # Fixed choices (goal, equipment, allergens, ...)
+│   │   ├── llm.py        # The one LLM wrapper: timeout, retries, logging
+│   │   ├── plan_generation.py  # Generate, validate and retry loop for both plan types
 │   │   ├── security.py   # Password hashing, password blocklist and JWT tokens
-│   │   └── targets.py    # Calorie and macro calculator (pure functions)
+│   │   ├── targets.py    # Calorie and macro calculator (pure functions)
+│   │   └── workout_plans.py  # Prompt and validation for workout plans
 │   ├── data/
 │   │   ├── common_passwords.txt  # Blocklist of common passwords
 │   │   ├── exercises.json        # Exercise catalog data
@@ -160,6 +166,7 @@ fitflow-api/
 - [Python 3.11+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/)
 - [Docker Desktop](https://docs.docker.com/get-docker/), to run PostgreSQL
+- [Ollama](https://ollama.com/download), to run the LLM locally (only needed to generate plans, not to run the tests)
 
 ### Installation
 
@@ -201,7 +208,15 @@ python -m app.seed
 
 The seed script loads the exercise and food catalogs. It is safe to run again.
 
-**6. Start the server**
+**6. Download the LLM model**
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+Ollama runs in the background after installation. To use another model, pull it and set `LLM_MODEL` in `.env`.
+
+**7. Start the server**
 
 ```bash
 uvicorn app.main:app --reload
@@ -250,6 +265,20 @@ curl "http://127.0.0.1:8000/exercises?muscle_group=chest&equipment=bodyweight" \
   -H "Authorization: Bearer <access_token>"
 curl "http://127.0.0.1:8000/foods?diet=vegetarian&exclude_allergen=peanuts" \
   -H "Authorization: Bearer <access_token>"
+
+# Generate a workout plan (a local model can take a minute)
+curl -X POST http://127.0.0.1:8000/plans/workout \
+  -H "Authorization: Bearer <access_token>"
+
+# Generate a one-day meal plan
+curl -X POST http://127.0.0.1:8000/plans/diet \
+  -H "Authorization: Bearer <access_token>"
+
+# Or choose the calories yourself (must be inside the safety limits)
+curl -X POST http://127.0.0.1:8000/plans/diet \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"target_kcal": 1700}'
 ```
 
 ---
@@ -264,6 +293,11 @@ curl "http://127.0.0.1:8000/foods?diet=vegetarian&exclude_allergen=peanuts" \
 | `MIN_DAILY_CALORIES_MALE`     | Lowest calorie target for men, in kcal (optional)   | `1500`                                           |
 | `MIN_DAILY_CALORIES_FEMALE`   | Lowest calorie target for women, in kcal (optional) | `1200`                                           |
 | `MAX_WEEKLY_WEIGHT_CHANGE_PERCENT` | Largest weekly weight change, as % of body weight (optional) | `1.0`                              |
+| `LLM_PROVIDER`                | LLM provider (optional)                | `ollama`                                                      |
+| `LLM_MODEL`                   | Model used to generate plans (optional) | `qwen2.5:7b`                                                 |
+| `LLM_BASE_URL`                | Address of the LLM server (optional)   | `http://localhost:11434`                                      |
+| `LLM_TIMEOUT_SECONDS`         | Seconds to wait for one answer (optional) | `180`                                                      |
+| `LLM_MAX_RETRIES`             | Extra attempts when the LLM is unreachable (optional) | `2`                                            |
 
 To generate a secure `JWT_SECRET`:
 
@@ -290,8 +324,12 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | `GET`  | `/profile/targets`  | Computed calorie and macro targets | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/exercises`        | Exercise catalog, with filters     | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/foods`            | Food catalog, with filters         | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
-| `POST` | `/plans/workout`    | Generate a weekly workout plan     | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| `POST` | `/plans/diet`       | Generate a daily meal plan         | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| `POST` | `/plans/workout`    | Generate a weekly workout plan     | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/plans/workout`    | List your workout plans            | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/plans/workout/{id}` | One workout plan in full       | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `POST` | `/plans/diet`       | Generate a daily meal plan         | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/plans/diet`       | List your diet plans               | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/plans/diet/{id}`  | One diet plan in full              | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 
 The full list of planned routes is in the [roadmap](ROADMAP.html). The routes available right now are always in the [interactive docs](#interactive-docs).
 
@@ -330,8 +368,8 @@ The full plan (design rules, how a plan is generated, the data model and every p
 | 1     | Foundation and auth (settings, database, JWT)     | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 2     | User profile                                      | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 3     | Exercise and food catalogs, targets calculator    | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
-| 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
-| 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
+| 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
 | 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
 | 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square) |

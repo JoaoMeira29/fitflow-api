@@ -18,5 +18,13 @@ class Settings(BaseSettings):
     MIN_DAILY_CALORIES_FEMALE: int = 1200
     MAX_WEEKLY_WEIGHT_CHANGE_PERCENT: float = 1.0
 
+    # LLM used to generate plans. Every call goes through app/core/llm.py.
+    LLM_PROVIDER: str = "ollama"
+    LLM_MODEL: str = "qwen2.5:7b"
+    LLM_BASE_URL: str = "http://localhost:11434"
+    LLM_TIMEOUT_SECONDS: float = 180
+    # Extra attempts when the provider times out or is unreachable.
+    LLM_MAX_RETRIES: int = 2
+
 
 settings = Settings()

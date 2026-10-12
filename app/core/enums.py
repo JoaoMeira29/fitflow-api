@@ -69,6 +69,13 @@ class Allergen(StrEnum):
     MOLLUSCS = "molluscs"
 
 
+class MealType(StrEnum):
+    BREAKFAST = "breakfast"
+    LUNCH = "lunch"
+    DINNER = "dinner"
+    SNACK = "snack"
+
+
 class DietaryRestriction(StrEnum):
     VEGETARIAN = "vegetarian"
     VEGAN = "vegan"

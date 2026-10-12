@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool
 from app import models  # noqa: F401  (registers every table on Base.metadata)
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.llm import LLMResponse, get_llm_client
 from app.core.security import create_access_token
 from app.main import app
 from app.models.user import User
@@ -84,6 +85,38 @@ async def auth_headers_for(db_session):
 @pytest.fixture
 async def auth_headers(auth_headers_for):
     return await auth_headers_for("ana@example.com")
+
+
+class FakeLLM:
+    """Stands in for LLMClient so tests never call a real model. It returns
+    the queued replies in order and records the messages it was sent."""
+
+    model = "fake-model"
+
+    def __init__(self):
+        self.replies: list[str | Exception] = []
+        self.calls: list[dict] = []
+
+    async def generate(self, messages, json_schema=None) -> LLMResponse:
+        self.calls.append({"messages": messages, "json_schema": json_schema})
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return LLMResponse(
+            content=reply,
+            model=self.model,
+            input_tokens=10,
+            output_tokens=20,
+            latency_ms=5,
+        )
+
+
+@pytest.fixture
+def fake_llm():
+    llm = FakeLLM()
+    app.dependency_overrides[get_llm_client] = lambda: llm
+    yield llm
+    app.dependency_overrides.pop(get_llm_client, None)
 
 
 @pytest.fixture

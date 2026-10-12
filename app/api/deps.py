@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.llm import LLMClient, get_llm_client
 from app.core.security import decode_access_token
 from app.models.user import User
 
@@ -43,3 +44,5 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+LLMClientDep = Annotated[LLMClient, Depends(get_llm_client)]

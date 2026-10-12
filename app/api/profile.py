@@ -7,7 +7,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.core.age import calculate_age
 from app.core.config import settings
 from app.core.enums import ActivityLevel, Goal, Sex
-from app.core.targets import SafetyLimits, calculate_targets
+from app.core.targets import SafetyLimits, Targets, calculate_targets
 from app.models.profile import Profile
 from app.schemas.profile import ProfileRead, ProfileUpdate
 from app.schemas.targets import TargetsRead
@@ -53,9 +53,12 @@ async def read_profile(profile: CurrentProfile):
     return profile
 
 
-@router.get("/targets", response_model=TargetsRead)
-async def read_targets(profile: CurrentProfile):
-    # The safety limits come from the settings; the arithmetic is pure Python.
+def targets_for_profile(
+    profile: Profile | ProfileRead, requested_calories: int | None = None
+) -> Targets:
+    """The calorie and macro targets for a profile. The safety limits come
+    from the settings; the arithmetic is pure Python. Raises
+    CalorieTargetError if `requested_calories` is outside the safety limits."""
     limits = SafetyLimits(
         min_calories_male=settings.MIN_DAILY_CALORIES_MALE,
         min_calories_female=settings.MIN_DAILY_CALORIES_FEMALE,
@@ -69,4 +72,10 @@ async def read_targets(profile: CurrentProfile):
         activity_level=ActivityLevel(profile.activity_level),
         goal=Goal(profile.goal),
         limits=limits,
+        requested_calories=requested_calories,
     )
+
+
+@router.get("/targets", response_model=TargetsRead)
+async def read_targets(profile: CurrentProfile):
+    return targets_for_profile(profile)

@@ -4,6 +4,7 @@ Nothing here touches the database, the settings or the LLM, so every function
 can be unit tested with plain numbers.
 """
 
+import math
 from dataclasses import dataclass
 
 from app.core.enums import ActivityLevel, Goal, Sex
@@ -98,6 +99,25 @@ def calculate_target_calories(
     return round(calories), floor_applied, cap_applied
 
 
+class CalorieTargetError(ValueError):
+    """A calorie target the user asked for is outside the safety limits."""
+
+
+def allowed_calorie_range(
+    tdee: float, sex: Sex, weight_kg: float, limits: SafetyLimits
+) -> tuple[int, int]:
+    """The lowest and highest calorie target a user may choose: never below
+    the calorie floor, and never further from maintenance than the weekly
+    weight-change cap allows."""
+    max_change = max_daily_calorie_change(weight_kg, limits)
+    floor = (
+        limits.min_calories_male if sex == Sex.MALE else limits.min_calories_female
+    )
+    lowest = max(floor, math.ceil(tdee - max_change))
+    highest = max(lowest, math.floor(tdee + max_change))
+    return lowest, highest
+
+
 def calculate_macros(calories: int, weight_kg: float, goal: Goal) -> tuple[int, int, int]:
     """Return (protein_g, carbs_g, fat_g). Protein follows body weight, fat is
     a fixed share of calories, and carbs take whatever calories are left."""
@@ -124,12 +144,25 @@ def calculate_targets(
     activity_level: ActivityLevel,
     goal: Goal,
     limits: SafetyLimits,
+    requested_calories: int | None = None,
 ) -> Targets:
+    """Compute the targets for a profile. With `requested_calories`, that
+    number replaces the goal-based calorie target, as long as it is inside
+    the safety limits; otherwise CalorieTargetError is raised."""
     bmr = calculate_bmr(sex, weight_kg, height_cm, age)
     tdee = calculate_tdee(bmr, activity_level)
-    calories, floor_applied, cap_applied = calculate_target_calories(
-        tdee, goal, sex, weight_kg, limits
-    )
+    if requested_calories is None:
+        calories, floor_applied, cap_applied = calculate_target_calories(
+            tdee, goal, sex, weight_kg, limits
+        )
+    else:
+        lowest, highest = allowed_calorie_range(tdee, sex, weight_kg, limits)
+        if not lowest <= requested_calories <= highest:
+            raise CalorieTargetError(
+                f"For your profile, the calorie target must be between "
+                f"{lowest} and {highest} kcal"
+            )
+        calories, floor_applied, cap_applied = requested_calories, False, False
     protein_g, carbs_g, fat_g = calculate_macros(calories, weight_kg, goal)
     return Targets(
         bmr=round(bmr),
