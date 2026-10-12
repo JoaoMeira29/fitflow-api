@@ -83,12 +83,13 @@ def valid_plan(catalog) -> str:
 
 
 def validate(catalog, plan: str, training_days=2, equipment=("dumbbells",)) -> list[str]:
-    return validate_workout_plan(
+    issues = validate_workout_plan(
         WorkoutPlanDraft.model_validate_json(plan),
         training_days=training_days,
         exercises_by_id={exercise.id: exercise for exercise in catalog.values()},
         equipment=available_equipment(equipment),
     )
+    return [issue.message for issue in issues]
 
 
 @pytest.fixture

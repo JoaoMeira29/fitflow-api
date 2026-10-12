@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from app.core.enums import Equipment
 from app.core.llm import LLMClient, Message
-from app.core.plan_generation import generate_valid_plan
+from app.core.plan_generation import AttemptRecord, Issue, generate_valid_plan
 from app.models.exercise import Exercise
 from app.schemas.profile import ProfileRead
 from app.schemas.workout import WorkoutPlanDraft
@@ -28,6 +28,13 @@ Rules:
 - Spread the muscle groups sensibly across the week.
 - Choose sets, reps and rest that suit the person's goal and activity level.
 - Reply with JSON only."""
+
+
+# The validation rules, by name. The evals report a pass rate for each one.
+RULE_DAY_COUNT = "day_count"
+RULE_KNOWN_EXERCISE = "known_exercise"
+RULE_EQUIPMENT = "equipment"
+RULE_NO_REPEATS = "no_repeats"
 
 
 @dataclass(frozen=True)
@@ -55,14 +62,17 @@ def validate_workout_plan(
     training_days: int,
     exercises_by_id: Mapping[uuid.UUID, Exercise],
     equipment: set[str],
-) -> list[str]:
+) -> list[Issue]:
     """Return every problem found in the plan. An empty list means valid."""
-    errors = []
+    issues = []
 
     if len(draft.days) != training_days:
-        errors.append(
-            f"The plan has {len(draft.days)} days but must have exactly "
-            f"{training_days}."
+        issues.append(
+            Issue(
+                RULE_DAY_COUNT,
+                f"The plan has {len(draft.days)} days but must have exactly "
+                f"{training_days}.",
+            )
         )
 
     for day_number, day in enumerate(draft.days, start=1):
@@ -70,26 +80,36 @@ def validate_workout_plan(
         for item in day.exercises:
             exercise = exercises_by_id.get(item.exercise_id)
             if exercise is None:
-                errors.append(
-                    f"Day {day_number}: exercise id {item.exercise_id} is not "
-                    "in the list of available exercises."
+                issues.append(
+                    Issue(
+                        RULE_KNOWN_EXERCISE,
+                        f"Day {day_number}: exercise id {item.exercise_id} is "
+                        "not in the list of available exercises.",
+                    )
                 )
                 continue
 
             missing = set(exercise.equipment) - equipment
             if missing:
-                errors.append(
-                    f"Day {day_number}: '{exercise.name}' needs equipment the "
-                    f"user does not have ({', '.join(sorted(missing))})."
+                issues.append(
+                    Issue(
+                        RULE_EQUIPMENT,
+                        f"Day {day_number}: '{exercise.name}' needs equipment "
+                        f"the user does not have ({', '.join(sorted(missing))}).",
+                    )
                 )
 
             if exercise.id in seen:
-                errors.append(
-                    f"Day {day_number}: '{exercise.name}' appears more than once."
+                issues.append(
+                    Issue(
+                        RULE_NO_REPEATS,
+                        f"Day {day_number}: '{exercise.name}' appears more than "
+                        "once.",
+                    )
                 )
             seen.add(exercise.id)
 
-    return errors
+    return issues
 
 
 def plan_json_schema(training_days: int, allowed_ids: Iterable[uuid.UUID]) -> dict:
@@ -137,6 +157,7 @@ async def generate_workout_plan(
     profile: ProfileRead,
     age: int,
     exercises: Iterable[Exercise],
+    attempt_log: list[AttemptRecord] | None = None,
 ) -> GeneratedWorkoutPlan:
     """Ask the LLM for a plan until it passes validation. Raises
     PlanGenerationError when it never does, and lets LLMError through when
@@ -146,14 +167,14 @@ async def generate_workout_plan(
     # The model is only shown exercises the user can actually do.
     allowed = doable_exercises(exercises_by_id.values(), equipment)
 
-    def check(draft: WorkoutPlanDraft) -> tuple[WorkoutPlanDraft, list[str]]:
-        errors = validate_workout_plan(
+    def check(draft: WorkoutPlanDraft) -> tuple[WorkoutPlanDraft, list[Issue]]:
+        issues = validate_workout_plan(
             draft,
             training_days=profile.training_days_per_week,
             exercises_by_id=exercises_by_id,
             equipment=equipment,
         )
-        return draft, errors
+        return draft, issues
 
     draft, model, attempts = await generate_valid_plan(
         llm,
@@ -163,5 +184,6 @@ async def generate_workout_plan(
         ),
         draft_model=WorkoutPlanDraft,
         check=check,
+        attempt_log=attempt_log,
     )
     return GeneratedWorkoutPlan(draft=draft, model=model, attempts=attempts)
