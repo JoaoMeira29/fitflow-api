@@ -13,5 +13,10 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Safety limits for calorie targets.
+    MIN_DAILY_CALORIES_MALE: int = 1500
+    MIN_DAILY_CALORIES_FEMALE: int = 1200
+    MAX_WEEKLY_WEIGHT_CHANGE_PERCENT: float = 1.0
+
 
 settings = Settings()

@@ -1,7 +1,8 @@
 from enum import StrEnum
 
-# The fixed choices a profile can use. They are stored in the database as
-# plain strings, so adding a new option is a code change with no migration.
+# The fixed choices profiles and catalogs can use. They are stored in the
+# database as plain strings, so adding a new option is a code change with no
+# migration.
 
 
 class Goal(StrEnum):
@@ -34,6 +35,20 @@ class Equipment(StrEnum):
     BENCH = "bench"
     CABLE_MACHINE = "cable_machine"
     MACHINES = "machines"
+
+
+class MuscleGroup(StrEnum):
+    CHEST = "chest"
+    BACK = "back"
+    SHOULDERS = "shoulders"
+    BICEPS = "biceps"
+    TRICEPS = "triceps"
+    QUADRICEPS = "quadriceps"
+    HAMSTRINGS = "hamstrings"
+    GLUTES = "glutes"
+    CALVES = "calves"
+    CORE = "core"
+    FULL_BODY = "full_body"
 
 
 class Allergen(StrEnum):

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, profile
+from app.api import auth, exercises, foods, profile
 
 # Uvicorn's own logger, so the lines below show up with its startup messages.
 logger = logging.getLogger("uvicorn.error")
@@ -33,6 +33,8 @@ app = FastAPI(
 
 app.include_router(auth.router)
 app.include_router(profile.router)
+app.include_router(exercises.router)
+app.include_router(foods.router)
 
 
 @app.get("/", tags=["Root"])

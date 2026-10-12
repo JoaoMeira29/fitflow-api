@@ -1,0 +1,143 @@
+"""Daily calorie and macro targets, as pure functions.
+
+Nothing here touches the database, the settings or the LLM, so every function
+can be unit tested with plain numbers.
+"""
+
+from dataclasses import dataclass
+
+from app.core.enums import ActivityLevel, Goal, Sex
+
+# Total daily energy expenditure = BMR x activity multiplier.
+ACTIVITY_MULTIPLIERS = {
+    ActivityLevel.SEDENTARY: 1.2,
+    ActivityLevel.LIGHT: 1.375,
+    ActivityLevel.MODERATE: 1.55,
+    ActivityLevel.ACTIVE: 1.725,
+    ActivityLevel.VERY_ACTIVE: 1.9,
+}
+
+# Share of maintenance calories added or removed for each goal.
+GOAL_ADJUSTMENTS = {
+    Goal.LOSE_WEIGHT: -0.20,
+    Goal.MAINTAIN: 0.0,
+    Goal.GAIN_MUSCLE: 0.10,
+}
+
+PROTEIN_G_PER_KG = {
+    Goal.LOSE_WEIGHT: 2.0,
+    Goal.MAINTAIN: 1.6,
+    Goal.GAIN_MUSCLE: 2.0,
+}
+FAT_SHARE_OF_CALORIES = 0.25
+
+KCAL_PER_G_PROTEIN = 4
+KCAL_PER_G_CARBS = 4
+KCAL_PER_G_FAT = 9
+# Approximate energy in one kilogram of body weight.
+KCAL_PER_KG_BODY_WEIGHT = 7700
+
+
+@dataclass(frozen=True)
+class SafetyLimits:
+    min_calories_male: int
+    min_calories_female: int
+    max_weekly_weight_change_percent: float
+
+
+@dataclass(frozen=True)
+class Targets:
+    bmr: int
+    tdee: int
+    calories: int
+    protein_g: int
+    carbs_g: int
+    fat_g: int
+    calorie_floor_applied: bool
+    weight_change_cap_applied: bool
+
+
+def calculate_bmr(sex: Sex, weight_kg: float, height_cm: float, age: int) -> float:
+    """Basal metabolic rate in kcal per day (Mifflin-St Jeor equation)."""
+    base = 10 * weight_kg + 6.25 * height_cm - 5 * age
+    return base + 5 if sex == Sex.MALE else base - 161
+
+
+def calculate_tdee(bmr: float, activity_level: ActivityLevel) -> float:
+    """Total daily energy expenditure: the calories that maintain weight."""
+    return bmr * ACTIVITY_MULTIPLIERS[activity_level]
+
+
+def max_daily_calorie_change(weight_kg: float, limits: SafetyLimits) -> float:
+    """Largest daily deficit or surplus that keeps weekly weight change within
+    the configured percentage of body weight."""
+    max_weekly_change_kg = weight_kg * limits.max_weekly_weight_change_percent / 100
+    return max_weekly_change_kg * KCAL_PER_KG_BODY_WEIGHT / 7
+
+
+def calculate_target_calories(
+    tdee: float, goal: Goal, sex: Sex, weight_kg: float, limits: SafetyLimits
+) -> tuple[int, bool, bool]:
+    """Return (calories, calorie_floor_applied, weight_change_cap_applied)."""
+    change = tdee * GOAL_ADJUSTMENTS[goal]
+
+    max_change = max_daily_calorie_change(weight_kg, limits)
+    cap_applied = abs(change) > max_change
+    if cap_applied:
+        change = max_change if change > 0 else -max_change
+
+    calories = tdee + change
+
+    floor = (
+        limits.min_calories_male if sex == Sex.MALE else limits.min_calories_female
+    )
+    floor_applied = calories < floor
+    if floor_applied:
+        calories = floor
+
+    return round(calories), floor_applied, cap_applied
+
+
+def calculate_macros(calories: int, weight_kg: float, goal: Goal) -> tuple[int, int, int]:
+    """Return (protein_g, carbs_g, fat_g). Protein follows body weight, fat is
+    a fixed share of calories, and carbs take whatever calories are left."""
+    fat_g = round(calories * FAT_SHARE_OF_CALORIES / KCAL_PER_G_FAT)
+    calories_left = calories - fat_g * KCAL_PER_G_FAT
+
+    # Protein cannot use more calories than are left after fat. This only
+    # matters for a very heavy person on a very low calorie target.
+    protein_g = round(
+        min(PROTEIN_G_PER_KG[goal] * weight_kg, calories_left / KCAL_PER_G_PROTEIN)
+    )
+    calories_left -= protein_g * KCAL_PER_G_PROTEIN
+
+    carbs_g = max(0, round(calories_left / KCAL_PER_G_CARBS))
+    return protein_g, carbs_g, fat_g
+
+
+def calculate_targets(
+    *,
+    sex: Sex,
+    age: int,
+    weight_kg: float,
+    height_cm: float,
+    activity_level: ActivityLevel,
+    goal: Goal,
+    limits: SafetyLimits,
+) -> Targets:
+    bmr = calculate_bmr(sex, weight_kg, height_cm, age)
+    tdee = calculate_tdee(bmr, activity_level)
+    calories, floor_applied, cap_applied = calculate_target_calories(
+        tdee, goal, sex, weight_kg, limits
+    )
+    protein_g, carbs_g, fat_g = calculate_macros(calories, weight_kg, goal)
+    return Targets(
+        bmr=round(bmr),
+        tdee=round(tdee),
+        calories=calories,
+        protein_g=protein_g,
+        carbs_g=carbs_g,
+        fat_g=fat_g,
+        calorie_floor_applied=floor_applied,
+        weight_change_cap_applied=cap_applied,
+    )

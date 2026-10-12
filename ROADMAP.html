@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 2 of 8 done</strong>
-        <span>19 of 53 tasks done</span>
+        <strong>Phase 3 of 8 done</strong>
+        <span>26 of 53 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 36%"></div></div>
+      <div class="bar"><div style="width: 49%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -385,7 +385,7 @@ erDiagram
         uuid id PK
         string name
         string muscle_group
-        string equipment
+        array equipment
         text description
     }
     FOODS {
@@ -505,18 +505,18 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">3</div>
         <div class="card">
-          <div class="phase-head"><h3>Catalogs and targets calculator</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Catalogs and targets calculator</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li><code>exercises</code> model, migration and seed script</li>
-            <li><code>foods</code> model, migration and seed script (a few hundred foods, per 100 g, with allergens and diet tags)</li>
-            <li><code>GET /exercises</code> and <code>GET /foods</code> with filters</li>
-            <li><code>app/core/targets.py</code>: Mifflin-St Jeor, activity multiplier, goal adjustment and macro split, as pure functions</li>
-            <li>Safety limits: configurable calorie floor and cap on weekly weight change</li>
-            <li><code>GET /profile/targets</code> returns the user's computed targets</li>
-            <li>Unit tests for the calculator</li>
+            <li class="done"><code>exercises</code> model, migration and seed script (98 exercises, each listing the equipment it needs)</li>
+            <li class="done"><code>foods</code> model, migration and seed script (197 foods, per 100 g, with allergens and diet tags)</li>
+            <li class="done"><code>GET /exercises</code> and <code>GET /foods</code> with filters</li>
+            <li class="done"><code>app/core/targets.py</code>: Mifflin-St Jeor, activity multiplier, goal adjustment and macro split, as pure functions</li>
+            <li class="done">Safety limits: configurable calorie floor and cap on weekly weight change</li>
+            <li class="done"><code>GET /profile/targets</code> returns the user's computed targets</li>
+            <li class="done">Unit tests for the calculator</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> both catalogs are queryable and every profile has calorie and macro targets, with no LLM involved.</div>
         </div>

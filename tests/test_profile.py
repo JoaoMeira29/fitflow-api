@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from app.core.age import calculate_age
+from app.core.config import settings
 from app.models.profile import Profile
 from app.models.user import User
 
@@ -199,6 +200,73 @@ async def test_each_user_only_sees_their_own_profile(client, auth_headers_for):
 
     assert (await client.get("/profile", headers=ana)).json()["goal"] == "lose_weight"
     assert (await client.get("/profile", headers=rui)).json()["goal"] == "gain_muscle"
+
+
+# --- GET /profile/targets --------------------------------------------------
+
+
+async def test_targets_are_computed_from_the_profile(client, auth_headers):
+    # A fixed age would drift as time passes, so the birth date is relative.
+    await put_profile(
+        client,
+        auth_headers,
+        goal="lose_weight",
+        sex="male",
+        birth_date=years_ago(28).isoformat(),
+        height_cm=170,
+        weight_kg=82.5,
+        activity_level="moderate",
+    )
+
+    response = await client.get("/profile/targets", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "bmr": 1752,
+        "tdee": 2716,
+        "calories": 2173,
+        "protein_g": 165,
+        "carbs_g": 243,
+        "fat_g": 60,
+        "calorie_floor_applied": False,
+        "weight_change_cap_applied": False,
+    }
+
+
+async def test_targets_change_when_the_profile_changes(client, auth_headers):
+    await put_profile(client, auth_headers, goal="lose_weight")
+    losing = (await client.get("/profile/targets", headers=auth_headers)).json()
+
+    await put_profile(client, auth_headers, goal="gain_muscle")
+    gaining = (await client.get("/profile/targets", headers=auth_headers)).json()
+
+    assert gaining["calories"] > losing["calories"]
+    assert gaining["tdee"] == losing["tdee"]
+
+
+async def test_targets_use_the_configured_calorie_floor(
+    client, auth_headers, monkeypatch
+):
+    monkeypatch.setattr(settings, "MIN_DAILY_CALORIES_FEMALE", 5000)
+    await put_profile(client, auth_headers, sex="female")
+
+    response = await client.get("/profile/targets", headers=auth_headers)
+
+    assert response.json()["calories"] == 5000
+    assert response.json()["calorie_floor_applied"] is True
+
+
+async def test_targets_return_404_when_there_is_no_profile(client, auth_headers):
+    response = await client.get("/profile/targets", headers=auth_headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Profile not found"
+
+
+async def test_targets_require_a_token(client):
+    response = await client.get("/profile/targets")
+
+    assert response.status_code == 401
 
 
 # --- Database --------------------------------------------------------------
