@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.core.enums import MealType
 from app.core.llm import LLMClient, Message, Tool, ToolError
 from app.core.plan_generation import AttemptRecord, Issue, generate_valid_plan
+from app.core.progress import ProgressSummary, progress_prompt
 from app.core.targets import Targets
 from app.models.food import Food
 from app.schemas.diet import DietItemDraft, DietMealDraft, DietPlanDraft
@@ -457,7 +458,10 @@ def build_messages(
     targets: Targets,
     foods: Iterable[Food],
     with_nutrition_tool: bool = False,
+    progress: ProgressSummary | None = None,
 ) -> list[Message]:
+    progress_text = progress_prompt(progress)
+    progress_block = f"\n{progress_text}\n" if progress_text else ""
     food_lines = "\n".join(
         f"{food.id} | {food.name} | {food.kcal_per_100g:g} | "
         f"{food.protein_per_100g:g}"
@@ -471,7 +475,7 @@ Goal: {profile.goal.value}
 Daily calorie target: {targets.calories} kcal
 Daily protein target: at least {targets.protein_g} g
 Dietary restrictions: {restrictions}
-
+{progress_block}
 Available foods (id | name | kcal per 100 g | protein g per 100 g):
 {food_lines}"""
     if with_nutrition_tool:
@@ -491,6 +495,7 @@ async def generate_diet_plan(
     profile: ProfileRead,
     targets: Targets,
     foods: Iterable[Food],
+    progress: ProgressSummary | None = None,
     attempt_log: list[AttemptRecord] | None = None,
 ) -> GeneratedDietPlan:
     """Ask the LLM for a plan until it passes validation. The returned plan
@@ -531,7 +536,11 @@ async def generate_diet_plan(
     draft, model, attempts = await generate_valid_plan(
         llm,
         messages=build_messages(
-            profile, targets, allowed, with_nutrition_tool=bool(tools)
+            profile,
+            targets,
+            allowed,
+            with_nutrition_tool=bool(tools),
+            progress=progress,
         ),
         json_schema=plan_json_schema(food.id for food in allowed),
         draft_model=DietPlanDraft,

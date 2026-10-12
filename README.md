@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
-![Phase](https://img.shields.io/badge/phase-6%20of%208%20done-blue?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-7%20of%208%20done-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
@@ -25,7 +25,7 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation work today, and are measured by evals. Progress logging and deployment are planned. See the [Roadmap](#roadmap).
+> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation and progress logging work today, and plan generation is measured by evals. CI and deployment are planned. See the [Roadmap](#roadmap).
 
 ## Table of Contents
 
@@ -57,7 +57,7 @@ A user creates a profile: goal, age, sex, weight, height, activity level, traini
 | **Targets**        | Daily calories and macros, computed in code                         | Available   |
 | **Workout plans**  | A weekly plan built from the exercise catalog                       | Available   |
 | **Diet plans**     | A daily meal plan built from the food catalog                       | Available   |
-| **Progress**       | Weight and workout logs that feed plan regeneration                 | Planned     |
+| **Progress**       | Weight and workout logs that feed plan regeneration                 | Available   |
 
 > FitFlow is a software project, not medical advice.
 
@@ -126,6 +126,7 @@ fitflow-api/
 │   │   ├── exercises.py  # Exercise catalog
 │   │   ├── foods.py      # Food catalog
 │   │   ├── profile.py    # Profile and calorie and macro targets
+│   │   ├── progress.py   # Weight and workout logs
 │   │   └── workouts.py   # Generate and read workout plans
 │   ├── core/
 │   │   ├── age.py        # Age calculation and the minimum age
@@ -135,6 +136,7 @@ fitflow-api/
 │   │   ├── enums.py      # Fixed choices (goal, equipment, allergens, ...)
 │   │   ├── llm.py        # The one LLM wrapper: providers, tools, timeout, retries, logging
 │   │   ├── plan_generation.py  # Generate, validate and retry loop for both plan types
+│   │   ├── progress.py   # Progress summary, also added to plan prompts
 │   │   ├── security.py   # Password hashing, password blocklist and JWT tokens
 │   │   ├── targets.py    # Calorie and macro calculator (pure functions)
 │   │   └── workout_plans.py  # Prompt and validation for workout plans
@@ -303,7 +305,22 @@ curl -X POST http://127.0.0.1:8000/plans/diet \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"target_kcal": 1700}'
+
+# Log today's weight, and a workout you completed
+curl -X POST http://127.0.0.1:8000/progress/weight \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"weight_kg": 81.9}'
+curl -X POST http://127.0.0.1:8000/progress/workouts \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"plan_day_id": "<id of a day in your workout plan>"}'
+
+# See your progress over the last 30 days
+curl http://127.0.0.1:8000/progress -H "Authorization: Bearer <access_token>"
 ```
+
+Generating a plan again after logging gives a plan that knows your new weight and how many workouts you completed.
 
 ---
 
@@ -356,6 +373,9 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | `POST` | `/plans/diet`       | Generate a daily meal plan         | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/plans/diet`       | List your diet plans               | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/plans/diet/{id}`  | One diet plan in full              | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `POST` | `/progress/weight`  | Log your weight for a day          | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `POST` | `/progress/workouts` | Log a completed workout day       | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/progress`         | Your logs and a summary            | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 
 The full list of planned routes is in the [roadmap](ROADMAP.html). The routes available right now are always in the [interactive docs](#interactive-docs).
 
@@ -447,7 +467,7 @@ The full plan (design rules, how a plan is generated, the data model and every p
 | 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
-| 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square) |
 
 ---

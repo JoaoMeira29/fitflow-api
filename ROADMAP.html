@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 6 of 8 done</strong>
-        <span>47 of 55 tasks done</span>
+        <strong>Phase 7 of 8 done</strong>
+        <span>51 of 55 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 85%"></div></div>
+      <div class="bar"><div style="width: 93%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -574,15 +574,15 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">7</div>
         <div class="card">
-          <div class="phase-head"><h3>Progress and regeneration</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Progress and regeneration</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li><code>weight_logs</code> and <code>workout_logs</code> models and migration</li>
-            <li><code>POST /progress/weight</code>, <code>POST /progress/workouts</code> and <code>GET /progress</code></li>
-            <li>Regeneration: targets recalculated from the latest weight, recent logs included in the prompt</li>
-            <li>Tests</li>
+            <li class="done"><code>weight_logs</code> and <code>workout_logs</code> models and migration</li>
+            <li class="done"><code>POST /progress/weight</code>, <code>POST /progress/workouts</code> and <code>GET /progress</code></li>
+            <li class="done">Regeneration: the newest weight log updates the profile, so targets are recalculated from it, and a summary of the last 28 days of logs is included in the prompt</li>
+            <li class="done">Tests</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> plans adapt to what the user actually did.</div>
         </div>

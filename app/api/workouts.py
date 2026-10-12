@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession, LLMClientDep
+from app.api.progress import recent_progress
 from app.core.age import calculate_age
 from app.core.llm import LLMError
 from app.core.plan_generation import PlanGenerationError
@@ -49,6 +50,10 @@ async def create_workout_plan(
         )
     profile = ProfileRead.model_validate(profile_row)
     exercises = (await db.scalars(select(Exercise))).all()
+    # What the user logged recently, so a regenerated plan can adapt to it.
+    progress = await recent_progress(
+        db, current_user.id, profile.training_days_per_week
+    )
     # The model can take a long time to answer. Ending the transaction here
     # returns the database connection to the pool while we wait.
     await db.commit()
@@ -59,6 +64,7 @@ async def create_workout_plan(
             profile=profile,
             age=calculate_age(profile.birth_date),
             exercises=exercises,
+            progress=progress,
         )
     except PlanGenerationError as error:
         raise HTTPException(

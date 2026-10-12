@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from app.core.enums import Equipment
 from app.core.llm import LLMClient, Message
 from app.core.plan_generation import AttemptRecord, Issue, generate_valid_plan
+from app.core.progress import ProgressSummary, progress_prompt
 from app.models.exercise import Exercise
 from app.schemas.profile import ProfileRead
 from app.schemas.workout import WorkoutPlanDraft
@@ -128,8 +129,13 @@ def plan_json_schema(training_days: int, allowed_ids: Iterable[uuid.UUID]) -> di
 
 
 def build_messages(
-    profile: ProfileRead, age: int, exercises: Iterable[Exercise]
+    profile: ProfileRead,
+    age: int,
+    exercises: Iterable[Exercise],
+    progress: ProgressSummary | None = None,
 ) -> list[Message]:
+    progress_text = progress_prompt(progress)
+    progress_block = f"\n{progress_text}\n" if progress_text else ""
     exercise_lines = "\n".join(
         f"{exercise.id} | {exercise.name} | {exercise.muscle_group}"
         for exercise in exercises
@@ -142,7 +148,7 @@ Age: {age}
 Sex: {profile.sex.value}
 Activity level: {profile.activity_level.value}
 Training days per week: {profile.training_days_per_week}
-
+{progress_block}
 Available exercises (id | name | muscle group):
 {exercise_lines}"""
     return [
@@ -157,6 +163,7 @@ async def generate_workout_plan(
     profile: ProfileRead,
     age: int,
     exercises: Iterable[Exercise],
+    progress: ProgressSummary | None = None,
     attempt_log: list[AttemptRecord] | None = None,
 ) -> GeneratedWorkoutPlan:
     """Ask the LLM for a plan until it passes validation. Raises
@@ -178,7 +185,7 @@ async def generate_workout_plan(
 
     draft, model, attempts = await generate_valid_plan(
         llm,
-        messages=build_messages(profile, age, allowed),
+        messages=build_messages(profile, age, allowed, progress),
         json_schema=plan_json_schema(
             profile.training_days_per_week, [exercise.id for exercise in allowed]
         ),

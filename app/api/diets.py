@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession, LLMClientDep
 from app.api.profile import targets_for_profile
+from app.api.progress import recent_progress
 from app.core.diet_plans import Nutrients, food_nutrients, generate_diet_plan
 from app.core.llm import LLMError
 from app.core.plan_generation import PlanGenerationError
@@ -134,13 +135,17 @@ async def create_diet_plan(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
         ) from None
     foods = (await db.scalars(select(Food))).all()
+    # What the user logged recently, so a regenerated plan can adapt to it.
+    progress = await recent_progress(
+        db, current_user.id, profile.training_days_per_week
+    )
     # The model can take a long time to answer. Ending the transaction here
     # returns the database connection to the pool while we wait.
     await db.commit()
 
     try:
         generated = await generate_diet_plan(
-            llm, profile=profile, targets=targets, foods=foods
+            llm, profile=profile, targets=targets, foods=foods, progress=progress
         )
     except PlanGenerationError as error:
         raise HTTPException(
