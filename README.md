@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
-![Phase](https://img.shields.io/badge/phase-5%20of%208%20done-blue?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-6%20of%208%20done-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
@@ -25,7 +25,7 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation work today. Evals, progress logging and deployment are planned. See the [Roadmap](#roadmap).
+> **Work in progress.** Sign-up, login, user profiles, the catalogs, calorie and macro targets, and workout and diet plan generation work today, and are measured by evals. Progress logging and deployment are planned. See the [Roadmap](#roadmap).
 
 ## Table of Contents
 
@@ -39,6 +39,7 @@
 - [Endpoints](#endpoints)
 - [Interactive Docs](#interactive-docs)
 - [Running Tests](#running-tests)
+- [Eval Results](#eval-results)
 - [Roadmap](#roadmap)
 - [License](#license)
 
@@ -103,7 +104,7 @@ flowchart LR
 | Migrations           | Alembic                                      |
 | Authentication       | JWT (PyJWT), Argon2 password hashing         |
 | Data Validation      | Pydantic, pydantic-settings                  |
-| LLM                  | Local model served by Ollama, behind a provider-agnostic wrapper |
+| LLM                  | Local model served by Ollama, or hosted Claude (Anthropic SDK), behind one provider-agnostic wrapper |
 | Testing              | Pytest, pytest-asyncio, HTTPX                |
 | Documentation        | OpenAPI (Swagger UI & ReDoc)                 |
 | Local Infrastructure | Docker Compose                               |
@@ -132,7 +133,7 @@ fitflow-api/
 │   │   ├── database.py   # SQLAlchemy engine, sessions and Base
 │   │   ├── diet_plans.py # Prompt, portion scaling and validation for diet plans
 │   │   ├── enums.py      # Fixed choices (goal, equipment, allergens, ...)
-│   │   ├── llm.py        # The one LLM wrapper: timeout, retries, logging
+│   │   ├── llm.py        # The one LLM wrapper: providers, tools, timeout, retries, logging
 │   │   ├── plan_generation.py  # Generate, validate and retry loop for both plan types
 │   │   ├── security.py   # Password hashing, password blocklist and JWT tokens
 │   │   ├── targets.py    # Calorie and macro calculator (pure functions)
@@ -146,7 +147,8 @@ fitflow-api/
 │   ├── main.py           # FastAPI entry point
 │   └── seed.py           # Loads the catalogs into the database
 ├── alembic/              # Database migrations
-├── tests/                # Automated tests
+├── tests/                # Automated tests (the LLM is mocked)
+│   └── evals/            # Evals against the real model, with their results
 ├── alembic.ini           # Alembic configuration
 ├── docker-compose.yml    # Local PostgreSQL
 ├── pytest.ini            # Pytest configuration
@@ -215,6 +217,28 @@ ollama pull qwen2.5:7b
 ```
 
 Ollama runs in the background after installation. To use another model, pull it and set `LLM_MODEL` in `.env`.
+
+<details>
+<summary><b>Using hosted Claude instead of a local model</b></summary>
+
+The LLM wrapper has a second provider that calls Claude through the official Anthropic SDK. It costs money per request, so it is off by default. To switch, set these in `.env` and restart the server:
+
+```
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-key-from-platform.claude.com
+```
+
+`LLM_MODEL` can stay empty (it defaults to `claude-opus-5-5`) or name another Claude model, such as `claude-haiku-5-5` for a much cheaper one. Nothing else changes: the same prompts, tools, validation, code repairs and retries run for both providers.
+
+</details>
+
+### The tool the model can call
+
+When it builds a diet plan, the model can be given a **tool**: `calculate_nutrition`. It sends a list of foods and portions, and the code returns the calories and macros, so the model can check its plan with real arithmetic before answering. The answer is still scaled and validated in code afterwards.
+
+The tool is off by default. To turn it on, set `LLM_USE_TOOLS=true` in `.env` and restart the server. The server log then shows how many times the model used it, as `tool_calls=3`.
+
+It works with both providers, with a caveat for the local one. In a test of four plans, `qwen2.5:7b` called the tool in three of them and all four were valid, but each plan took 58 to 99 seconds, against about 19 seconds without the tool.
 
 **7. Start the server**
 
@@ -293,9 +317,11 @@ curl -X POST http://127.0.0.1:8000/plans/diet \
 | `MIN_DAILY_CALORIES_MALE`     | Lowest calorie target for men, in kcal (optional)   | `1500`                                           |
 | `MIN_DAILY_CALORIES_FEMALE`   | Lowest calorie target for women, in kcal (optional) | `1200`                                           |
 | `MAX_WEEKLY_WEIGHT_CHANGE_PERCENT` | Largest weekly weight change, as % of body weight (optional) | `1.0`                              |
-| `LLM_PROVIDER`                | LLM provider (optional)                | `ollama`                                                      |
-| `LLM_MODEL`                   | Model used to generate plans (optional) | `qwen2.5:7b`                                                 |
-| `LLM_BASE_URL`                | Address of the LLM server (optional)   | `http://localhost:11434`                                      |
+| `LLM_PROVIDER`                | `ollama` (local) or `anthropic` (hosted Claude) (optional) | `ollama`                                  |
+| `LLM_MODEL`                   | Model used to generate plans; empty means the provider's default (optional) | `qwen2.5:7b`             |
+| `LLM_USE_TOOLS`               | Let the model call the nutrition calculator tool (optional) | `false`                                  |
+| `LLM_BASE_URL`                | Address of the Ollama server (optional) | `http://localhost:11434`                                     |
+| `ANTHROPIC_API_KEY`           | API key, only needed when `LLM_PROVIDER` is `anthropic` | `sk-ant-...`                                 |
 | `LLM_TIMEOUT_SECONDS`         | Seconds to wait for one answer (optional) | `180`                                                      |
 | `LLM_MAX_RETRIES`             | Extra attempts when the LLM is unreachable (optional) | `2`                                            |
 
@@ -357,6 +383,56 @@ docker compose up -d db
 pytest
 ```
 
+These tests mock the LLM, so they need no model and run in seconds.
+
+### Evals
+
+The evals generate plans with the **real model** for 30 varied profiles and report how often each validation rule passes. They are slow and need Ollama running, so plain `pytest` skips them. They do not use the database.
+
+```bash
+pytest -m evals -s
+```
+
+Each run writes a Markdown report to `tests/evals/results/`, named after the date and the model. To try another model, change `LLM_MODEL` in `.env` and run them again. The run fails if fewer than 90% of profiles end with a valid plan.
+
+---
+
+## Eval Results
+
+Latest run: `qwen2.5:7b` on a local GPU, 30 profiles, 12 October 2026, with tools off. The full reports are in [tests/evals/results/](tests/evals/results/).
+
+| Result                                   | Workout plans | Diet plans  |
+| ---------------------------------------- | :-----------: | :---------: |
+| Valid on the first attempt               | 28/30 (93%)   | 25/30 (83%) |
+| Valid after retries                      | 2/30 (7%)     | 2/30 (7%)   |
+| **Valid plan produced**                  | **30/30 (100%)** | **27/30 (90%)** |
+| Failed after 2 retries                   | 0             | 3/30 (10%)  |
+| Median time per plan                     | 23 s          | 19 s        |
+
+Both evals meet the 90% threshold, the diet one only just.
+
+How the model's first diet answer did, rule by rule, at each stage of the pipeline:
+
+| Rule                                 | As the model wrote it | After calorie scaling | After protein repair |
+| ------------------------------------ | :-------------------: | :-------------------: | :------------------: |
+| Schema, four meals, known foods      | 30/30                 | -                     | -                    |
+| No allergens, restrictions respected | 30/30                 | -                     | -                    |
+| Calories within 5% of target         | 9/30 (30%)            | 30/30 (100%)          | 30/30 (100%)         |
+| Protein at or above target           | 12/30 (40%)           | 16/30 (53%)           | 25/30 (83%)          |
+| Every portion between 5 g and 600 g  | -                     | 30/30 (100%)          | 29/30 (97%)          |
+
+What the numbers show:
+
+- **The structural rules never failed.** The model is only offered items the user can use, and the JSON schema only allows those IDs, so it has no way to pick an allergen or an unknown item.
+- **The model cannot do the arithmetic.** Left alone it hit the calorie target 30% of the time. Scaling in code makes that 100%, which is design rule 1 measured.
+- **Protein is the one rule that still fails.** Code repair lifts the pass rate from 53% to 83% and retries recover two more plans. The three that still fail chose too few high-protein foods for the code to fix.
+
+### What the evals changed
+
+The first run produced a valid diet plan for 26 of 30 profiles (87%), below the threshold. All four failures were people losing weight whose protein target, at 2.0 g per kg of body weight, came to between 31% and 48% of their calories. That is a problem with the target, not the model, so protein is now capped at 35% of the day's calories. The run above is the one after that change; the earlier report is kept next to it.
+
+One run each is a small sample: results move by a plan or two between runs, so the difference between 87% and 90% is suggestive, not proof.
+
 ---
 
 ## Roadmap
@@ -370,7 +446,7 @@ The full plan (design rules, how a plan is generated, the data model and every p
 | 3     | Exercise and food catalogs, targets calculator    | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
-| 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
 | 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
 | 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square) |
 

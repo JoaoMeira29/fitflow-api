@@ -243,10 +243,10 @@
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 5 of 8 done</strong>
-        <span>42 of 54 tasks done</span>
+        <strong>Phase 6 of 8 done</strong>
+        <span>47 of 55 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 78%"></div></div>
+      <div class="bar"><div style="width: 85%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -296,7 +296,7 @@ flowchart LR
       <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Generates and applies migrations, so the database schema is versioned in Git.</p></div>
       <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 hashes passwords; PyJWT signs and validates access tokens.</p></div>
       <div class="card tech"><h3>Targets calculator</h3><div class="where mono">app/core/targets.py</div><p>Pure functions that turn a profile into calorie and macro targets, with the safety limits applied.</p></div>
-      <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. It talks to a local model served by Ollama (<code>qwen2.5:7b</code> by default); the provider and model are settings.</p></div>
+      <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. It talks to a local model served by Ollama (<code>qwen2.5:7b</code> by default) or to hosted Claude through the Anthropic SDK; the provider and model are settings.</p></div>
       <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/, tests/evals/</div><p>Regular tests run against a test database with the LLM mocked. Evals call the real model under a separate marker.</p></div>
       <div class="card tech"><h3>Docker Compose</h3><div class="where mono">docker-compose.yml</div><p>Starts PostgreSQL locally with one command.</p></div>
       <div class="card tech"><h3>GitHub Actions</h3><div class="where mono">.github/workflows/</div><p>Runs migrations and the regular test suite on every push.</p></div>
@@ -551,6 +551,7 @@ erDiagram
             <li class="done">Validation: food IDs exist, no allergens or restricted foods, calories within 5% of target, protein at or above target</li>
             <li class="done">Portion rescaling in code: each meal is scaled to its share of the calorie target, then calories are moved towards its high-protein foods if protein is short</li>
             <li class="done">Optional calorie target chosen by the user, checked against the safety limits</li>
+            <li class="done">Second provider, hosted Claude through the Anthropic SDK, and a <code>calculate_nutrition</code> tool the model can call on either provider</li>
             <li class="done">Diet plan tables and migration</li>
             <li class="done"><code>POST /plans/diet</code>, <code>GET /plans/diet</code> and <code>GET /plans/diet/{id}</code></li>
             <li class="done">Tests with the LLM mocked</li>
@@ -559,15 +560,15 @@ erDiagram
         </div>
       </div>
 
-      <div class="phase">
+      <div class="phase done">
         <div class="num">6</div>
         <div class="card">
-          <div class="phase-head"><h3>Evals</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Evals</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
-            <li>About 30 varied test profiles in <code>tests/evals/</code></li>
-            <li>Separate <code>evals</code> pytest marker, excluded from the regular test run</li>
-            <li>Report the pass rate for each validation rule</li>
-            <li>Record the results in the README</li>
+            <li class="done">30 varied test profiles in <code>tests/evals/</code></li>
+            <li class="done">Separate <code>evals</code> pytest marker, excluded from the regular test run</li>
+            <li class="done">Report the pass rate for each validation rule</li>
+            <li class="done">Record the results in the README</li>
           </ul>
           <div class="deliverable"><b>Deliverable:</b> measured evidence of how often the real model produces a valid plan, per rule.</div>
         </div>

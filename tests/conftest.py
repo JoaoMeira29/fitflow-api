@@ -92,13 +92,17 @@ class FakeLLM:
     the queued replies in order and records the messages it was sent."""
 
     model = "fake-model"
+    # Set to True in a test to act like a provider that supports tools.
+    supports_tools = False
 
     def __init__(self):
         self.replies: list[str | Exception] = []
         self.calls: list[dict] = []
 
-    async def generate(self, messages, json_schema=None) -> LLMResponse:
-        self.calls.append({"messages": messages, "json_schema": json_schema})
+    async def generate(self, messages, json_schema=None, tools=None) -> LLMResponse:
+        self.calls.append(
+            {"messages": messages, "json_schema": json_schema, "tools": tools or []}
+        )
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply

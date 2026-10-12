@@ -10,6 +10,7 @@ from app.core.diet_plans import (
     food_nutrients,
     is_high_protein,
     meal_nutrients,
+    nutrition_tool,
     plan_json_schema,
     plan_nutrients,
     rebalance_for_protein,
@@ -17,7 +18,7 @@ from app.core.diet_plans import (
     validate_foods,
     validate_targets,
 )
-from app.core.llm import LLMError
+from app.core.llm import LLMError, ToolError
 from app.models.diet_plan import DietPlan, DietPlanMealItem
 from app.models.food import Food
 from app.schemas.diet import DIET_NOTICE, DietPlanDraft
@@ -125,12 +126,13 @@ def by_id(catalog) -> dict[uuid.UUID, Food]:
 
 
 def check_foods(catalog, plan: str, allergies=(), restrictions=()) -> list[str]:
-    return validate_foods(
+    issues = validate_foods(
         draft_of(plan),
         foods_by_id=by_id(catalog),
         allergies=allergies,
         restrictions=restrictions,
     )
+    return [issue.message for issue in issues]
 
 
 @pytest.fixture
@@ -390,9 +392,10 @@ def test_rebalance_cannot_fix_a_plan_without_protein_sources(catalog):
 
 
 def check_targets(catalog, plan: DietPlanDraft, kcal=2000, protein=100) -> list[str]:
-    return validate_targets(
+    issues = validate_targets(
         plan, foods_by_id=by_id(catalog), target_kcal=kcal, target_protein_g=protein
     )
+    return [issue.message for issue in issues]
 
 
 def test_a_scaled_plan_with_enough_protein_has_no_errors(catalog):
@@ -471,6 +474,97 @@ def test_schema_only_allows_the_offered_foods_and_four_meals():
     assert food_id["enum"] == [str(ids[0]), str(ids[1])]
     assert schema["properties"]["meals"]["minItems"] == 4
     assert schema["properties"]["meals"]["maxItems"] == 4
+
+
+# --- nutrition_tool --------------------------------------------------------
+
+
+def tool_items(catalog, **grams_by_food: float) -> dict:
+    return {
+        "items": [
+            {"food_id": str(catalog[name.replace("_", " ")].id), "grams": grams}
+            for name, grams in grams_by_food.items()
+        ]
+    }
+
+
+def test_nutrition_tool_adds_up_the_foods(catalog):
+    tool = nutrition_tool(catalog.values())
+
+    result = tool.handler(tool_items(catalog, Chicken_breast=200, White_rice=150))
+
+    assert result == {
+        "kcal": 435,  # 240 + 195
+        "protein_g": 49.0,  # 45 + 4.05, rounded
+        "carbs_g": 42.3,
+        "fat_g": 5.7,
+    }
+
+
+def test_nutrition_tool_rejects_a_food_that_is_not_on_offer(catalog):
+    tool = nutrition_tool([catalog["White rice"]])
+
+    with pytest.raises(ToolError, match="not in the list of available foods"):
+        tool.handler(tool_items(catalog, Chicken_breast=200))
+
+
+def test_nutrition_tool_rejects_a_portion_of_zero(catalog):
+    tool = nutrition_tool(catalog.values())
+
+    with pytest.raises(ToolError, match="must be above 0 g"):
+        tool.handler(tool_items(catalog, White_rice=0))
+
+
+def test_nutrition_tool_schema_is_strict(catalog):
+    schema = nutrition_tool(catalog.values()).input_schema
+
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["items"]
+    item = schema["properties"]["items"]["items"]
+    assert item["additionalProperties"] is False
+    assert item["required"] == ["food_id", "grams"]
+
+
+async def test_post_offers_the_nutrition_tool_when_the_provider_supports_tools(
+    client, auth_headers, catalog, profile, fake_llm
+):
+    fake_llm.supports_tools = True
+    fake_llm.replies = [valid_plan(catalog)]
+
+    response = await client.post("/plans/diet", headers=auth_headers)
+
+    assert response.status_code == 201
+    call = fake_llm.calls[0]
+    assert [tool.name for tool in call["tools"]] == ["calculate_nutrition"]
+    assert "calculate_nutrition tool" in call["messages"][1]["content"]
+
+
+async def test_post_only_lets_the_tool_use_foods_the_user_can_eat(
+    client, auth_headers, catalog, fake_llm
+):
+    await client.put(
+        "/profile", json={**PROFILE, "allergies": ["peanuts"]}, headers=auth_headers
+    )
+    fake_llm.supports_tools = True
+    fake_llm.replies = [valid_plan(catalog)]
+
+    await client.post("/plans/diet", headers=auth_headers)
+
+    tool = fake_llm.calls[0]["tools"][0]
+    with pytest.raises(ToolError):
+        tool.handler(tool_items(catalog, Peanut_butter=20))
+
+
+async def test_post_offers_no_tool_when_the_provider_does_not_support_tools(
+    client, auth_headers, catalog, profile, fake_llm
+):
+    fake_llm.replies = [valid_plan(catalog)]
+
+    await client.post("/plans/diet", headers=auth_headers)
+
+    call = fake_llm.calls[0]
+    assert call["tools"] == []
+    assert "calculate_nutrition" not in call["messages"][1]["content"]
 
 
 # --- POST /plans/diet ------------------------------------------------------

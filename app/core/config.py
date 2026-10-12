@@ -1,3 +1,6 @@
+from typing import Literal
+
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,9 +22,17 @@ class Settings(BaseSettings):
     MAX_WEEKLY_WEIGHT_CHANGE_PERCENT: float = 1.0
 
     # LLM used to generate plans. Every call goes through app/core/llm.py.
-    LLM_PROVIDER: str = "ollama"
-    LLM_MODEL: str = "qwen2.5:7b"
+    # "ollama" is a local model; "anthropic" is hosted Claude.
+    LLM_PROVIDER: Literal["ollama", "anthropic"] = "ollama"
+    # Empty means the provider's default model (see DEFAULT_MODELS in llm.py).
+    LLM_MODEL: str | None = None
+    # Let the model call tools (the nutrition calculator). Off by default:
+    # the small local model often fails to write a proper tool call.
+    LLM_USE_TOOLS: bool = False
+    # Only used by Ollama.
     LLM_BASE_URL: str = "http://localhost:11434"
+    # Only used by Anthropic. SecretStr keeps it out of logs and error pages.
+    ANTHROPIC_API_KEY: SecretStr | None = None
     LLM_TIMEOUT_SECONDS: float = 180
     # Extra attempts when the provider times out or is unreachable.
     LLM_MAX_RETRIES: int = 2

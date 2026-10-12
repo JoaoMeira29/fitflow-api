@@ -12,12 +12,24 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from app.core.enums import MealType
-from app.core.llm import LLMClient, Message
-from app.core.plan_generation import generate_valid_plan
+from app.core.llm import LLMClient, Message, Tool, ToolError
+from app.core.plan_generation import AttemptRecord, Issue, generate_valid_plan
 from app.core.targets import Targets
 from app.models.food import Food
 from app.schemas.diet import DietItemDraft, DietMealDraft, DietPlanDraft
 from app.schemas.profile import ProfileRead
+
+# The validation rules, by name. The evals report a pass rate for each one.
+RULE_MEALS = "meals"
+RULE_KNOWN_FOOD = "known_food"
+RULE_ALLERGENS = "allergens"
+RULE_RESTRICTIONS = "restrictions"
+RULE_NO_REPEATS = "no_repeats"
+RULE_CALORIES = "calories"
+RULE_PROTEIN = "protein"
+RULE_PORTIONS = "portions"
+
+NUTRITION_TOOL_NAME = "calculate_nutrition"
 
 # Daily calories may differ from the target by at most this share.
 CALORIE_TOLERANCE = 0.05
@@ -141,16 +153,19 @@ def validate_foods(
     foods_by_id: Mapping[uuid.UUID, Food],
     allergies: Iterable[str],
     restrictions: Iterable[str],
-) -> list[str]:
+) -> list[Issue]:
     """Check the structure and the food choices, before any arithmetic."""
     allergies, restrictions = set(allergies), set(restrictions)
-    errors = []
+    issues = []
 
     meal_types = [meal.meal_type for meal in draft.meals]
     if sorted(meal_types) != sorted(REQUIRED_MEALS):
-        errors.append(
-            "The plan must have exactly four meals: breakfast, lunch, dinner "
-            f"and snack. It has: {', '.join(meal_types)}."
+        issues.append(
+            Issue(
+                RULE_MEALS,
+                "The plan must have exactly four meals: breakfast, lunch, "
+                f"dinner and snack. It has: {', '.join(meal_types)}.",
+            )
         )
 
     for meal in draft.meals:
@@ -158,33 +173,46 @@ def validate_foods(
         for item in meal.items:
             food = foods_by_id.get(item.food_id)
             if food is None:
-                errors.append(
-                    f"{meal.meal_type}: food id {item.food_id} is not in the "
-                    "list of available foods."
+                issues.append(
+                    Issue(
+                        RULE_KNOWN_FOOD,
+                        f"{meal.meal_type}: food id {item.food_id} is not in "
+                        "the list of available foods.",
+                    )
                 )
                 continue
 
             found_allergens = allergies & set(food.allergens)
             if found_allergens:
-                errors.append(
-                    f"{meal.meal_type}: '{food.name}' contains an allergen the "
-                    f"user must avoid ({', '.join(sorted(found_allergens))})."
+                issues.append(
+                    Issue(
+                        RULE_ALLERGENS,
+                        f"{meal.meal_type}: '{food.name}' contains an allergen "
+                        "the user must avoid "
+                        f"({', '.join(sorted(found_allergens))}).",
+                    )
                 )
 
             unmet = restrictions - set(food.diet_tags)
             if unmet:
-                errors.append(
-                    f"{meal.meal_type}: '{food.name}' is not suitable for a "
-                    f"{', '.join(sorted(unmet))} diet."
+                issues.append(
+                    Issue(
+                        RULE_RESTRICTIONS,
+                        f"{meal.meal_type}: '{food.name}' is not suitable for "
+                        f"a {', '.join(sorted(unmet))} diet.",
+                    )
                 )
 
             if food.id in seen:
-                errors.append(
-                    f"{meal.meal_type}: '{food.name}' appears more than once."
+                issues.append(
+                    Issue(
+                        RULE_NO_REPEATS,
+                        f"{meal.meal_type}: '{food.name}' appears more than once.",
+                    )
                 )
             seen.add(food.id)
 
-    return errors
+    return issues
 
 
 def rescale_to_calories(
@@ -297,43 +325,55 @@ def validate_targets(
     foods_by_id: Mapping[uuid.UUID, Food],
     target_kcal: int,
     target_protein_g: int,
-) -> list[str]:
+) -> list[Issue]:
     """Check the numbers: calories, protein and portion sizes."""
-    errors = []
+    issues = []
     totals = plan_nutrients(draft, foods_by_id)
 
     if abs(totals.kcal - target_kcal) > CALORIE_TOLERANCE * target_kcal:
-        errors.append(
-            f"The plan has {round(totals.kcal)} kcal but must be within "
-            f"{round(CALORIE_TOLERANCE * 100)}% of {target_kcal} kcal."
+        issues.append(
+            Issue(
+                RULE_CALORIES,
+                f"The plan has {round(totals.kcal)} kcal but must be within "
+                f"{round(CALORIE_TOLERANCE * 100)}% of {target_kcal} kcal.",
+            )
         )
 
     # Compare whole grams, the same precision the targets use.
     if round(totals.protein_g) < target_protein_g:
-        errors.append(
-            f"With portions scaled to {target_kcal} kcal, the plan has "
-            f"{round(totals.protein_g)} g of protein but needs at least "
-            f"{target_protein_g} g. Use more high-protein foods and fewer "
-            "low-protein ones."
+        issues.append(
+            Issue(
+                RULE_PROTEIN,
+                f"With portions scaled to {target_kcal} kcal, the plan has "
+                f"{round(totals.protein_g)} g of protein but needs at least "
+                f"{target_protein_g} g. Use more high-protein foods and fewer "
+                "low-protein ones.",
+            )
         )
 
     for meal in draft.meals:
         for item in meal.items:
             name = foods_by_id[item.food_id].name
             if item.grams > MAX_PORTION_GRAMS:
-                errors.append(
-                    f"{meal.meal_type}: {round(item.grams)} g of '{name}' is "
-                    f"more than {MAX_PORTION_GRAMS} g. Add other foods to the "
-                    "meal or use foods with more calories."
+                issues.append(
+                    Issue(
+                        RULE_PORTIONS,
+                        f"{meal.meal_type}: {round(item.grams)} g of '{name}' "
+                        f"is more than {MAX_PORTION_GRAMS} g. Add other foods "
+                        "to the meal or use foods with more calories.",
+                    )
                 )
             elif item.grams < MIN_PORTION_GRAMS:
-                errors.append(
-                    f"{meal.meal_type}: {round(item.grams)} g of '{name}' is "
-                    f"less than {MIN_PORTION_GRAMS} g. Use a larger share of "
-                    "it or leave it out."
+                issues.append(
+                    Issue(
+                        RULE_PORTIONS,
+                        f"{meal.meal_type}: {round(item.grams)} g of '{name}' "
+                        f"is less than {MIN_PORTION_GRAMS} g. Use a larger "
+                        "share of it or leave it out.",
+                    )
                 )
 
-    return errors
+    return issues
 
 
 def plan_json_schema(allowed_ids: Iterable[uuid.UUID]) -> dict:
@@ -349,8 +389,74 @@ def plan_json_schema(allowed_ids: Iterable[uuid.UUID]) -> dict:
     return schema
 
 
+def nutrition_tool(foods: Iterable[Food]) -> Tool:
+    """A calculator the model can call to check a meal or the whole day
+    before it answers. The model picks the foods; this does the arithmetic."""
+    foods_by_id = {str(food.id): food for food in foods}
+
+    def calculate(arguments: dict) -> dict:
+        total = Nutrients()
+        for item in arguments["items"]:
+            food = foods_by_id.get(item["food_id"])
+            if food is None:
+                raise ToolError(
+                    f"Food id {item['food_id']} is not in the list of "
+                    "available foods."
+                )
+            if item["grams"] <= 0:
+                raise ToolError(f"The portion of '{food.name}' must be above 0 g.")
+            total += food_nutrients(food, item["grams"])
+        return {
+            "kcal": round(total.kcal),
+            "protein_g": round(total.protein_g, 1),
+            "carbs_g": round(total.carbs_g, 1),
+            "fat_g": round(total.fat_g, 1),
+        }
+
+    return Tool(
+        name=NUTRITION_TOOL_NAME,
+        description=(
+            "Add up the calories, protein, carbs and fat of a list of foods "
+            "and portions. Use it to check a meal or the whole day before you "
+            "give your final plan, instead of adding the numbers up yourself. "
+            "Takes food ids from the list of available foods and portions in "
+            "grams, and returns the totals."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "The foods to add up.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "food_id": {
+                                "type": "string",
+                                "description": "An id from the list of foods.",
+                            },
+                            "grams": {
+                                "type": "number",
+                                "description": "The portion in grams.",
+                            },
+                        },
+                        "required": ["food_id", "grams"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["items"],
+            "additionalProperties": False,
+        },
+        handler=calculate,
+    )
+
+
 def build_messages(
-    profile: ProfileRead, targets: Targets, foods: Iterable[Food]
+    profile: ProfileRead,
+    targets: Targets,
+    foods: Iterable[Food],
+    with_nutrition_tool: bool = False,
 ) -> list[Message]:
     food_lines = "\n".join(
         f"{food.id} | {food.name} | {food.kcal_per_100g:g} | "
@@ -368,6 +474,11 @@ Dietary restrictions: {restrictions}
 
 Available foods (id | name | kcal per 100 g | protein g per 100 g):
 {food_lines}"""
+    if with_nutrition_tool:
+        user_prompt += f"""
+
+Before you answer, check the whole day with the {NUTRITION_TOOL_NAME} tool. If \
+the protein is below the target, change the foods or portions and check again."""
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
@@ -380,6 +491,7 @@ async def generate_diet_plan(
     profile: ProfileRead,
     targets: Targets,
     foods: Iterable[Food],
+    attempt_log: list[AttemptRecord] | None = None,
 ) -> GeneratedDietPlan:
     """Ask the LLM for a plan until it passes validation. The returned plan
     already has its portions scaled to the calorie target. Raises
@@ -391,32 +503,40 @@ async def generate_diet_plan(
         foods_by_id.values(), profile.allergies, profile.dietary_restrictions
     )
 
-    def check(draft: DietPlanDraft) -> tuple[DietPlanDraft, list[str]]:
-        errors = validate_foods(
+    def check(draft: DietPlanDraft) -> tuple[DietPlanDraft, list[Issue]]:
+        issues = validate_foods(
             draft,
             foods_by_id=foods_by_id,
             allergies=profile.allergies,
             restrictions=profile.dietary_restrictions,
         )
-        if errors:
+        if issues:
             # Unknown foods or missing meals cannot be scaled, so stop here.
-            return draft, errors
+            return draft, issues
 
         scaled = rescale_to_calories(draft, foods_by_id, targets.calories)
         scaled = rebalance_for_protein(scaled, foods_by_id, targets.protein_g)
-        errors = validate_targets(
+        issues = validate_targets(
             scaled,
             foods_by_id=foods_by_id,
             target_kcal=targets.calories,
             target_protein_g=targets.protein_g,
         )
-        return scaled, errors
+        return scaled, issues
+
+    # A provider that supports tools gets a calculator, so the model can check
+    # its numbers. Whatever it answers is still scaled and validated above.
+    tools = [nutrition_tool(allowed)] if llm.supports_tools else []
 
     draft, model, attempts = await generate_valid_plan(
         llm,
-        messages=build_messages(profile, targets, allowed),
+        messages=build_messages(
+            profile, targets, allowed, with_nutrition_tool=bool(tools)
+        ),
         json_schema=plan_json_schema(food.id for food in allowed),
         draft_model=DietPlanDraft,
         check=check,
+        tools=tools,
+        attempt_log=attempt_log,
     )
     return GeneratedDietPlan(draft=draft, model=model, attempts=attempts)
