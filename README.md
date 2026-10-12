@@ -2,22 +2,22 @@
 
 # FitFlow API
 
-**A RESTful API for tracking and managing workouts, exercises and fitness plans.**
+**An AI-powered workout and diet plan generator, where the LLM chooses and the code calculates.**
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-1%20of%208%20done-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 [About](#about) •
+[Design Rules](#design-rules) •
 [Quick Start](#quick-start) •
 [Endpoints](#endpoints) •
-[Docker](#running-with-docker) •
 [Roadmap](#roadmap)
 
 </div>
@@ -25,11 +25,12 @@
 ---
 
 > [!NOTE]
-> **Work in progress.** The project structure and the FastAPI app are in place; authentication, workouts and exercises are being implemented. See the [Roadmap](#roadmap) for what is already available.
+> **Work in progress.** Sign-up, login and JWT authentication work today. Profiles, catalogs, plan generation and evals are planned. See the [Roadmap](#roadmap).
 
 ## Table of Contents
 
 - [About](#about)
+- [Design Rules](#design-rules)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -37,8 +38,6 @@
 - [Environment Variables](#environment-variables)
 - [Endpoints](#endpoints)
 - [Interactive Docs](#interactive-docs)
-- [Running with Docker](#running-with-docker)
-- [Deploying to Kubernetes](#deploying-to-kubernetes)
 - [Running Tests](#running-tests)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -47,14 +46,31 @@
 
 ## About
 
-**FitFlow** is a fitness tracking application. This API is its backend, and lets users:
+A user creates a profile: goal, age, sex, weight, height, activity level, training days per week, available equipment, allergies and dietary restrictions. **FitFlow** then generates a weekly workout plan and a daily meal plan, stores them, and can regenerate them later from logged progress.
 
-| Feature            | Description                                  |
-| ------------------ | -------------------------------------------- |
-| **Authentication** | Sign up and log in with JWT tokens           |
-| **Exercises**      | Browse a catalog of exercises                |
-| **Workouts**       | Create, edit and log workouts                |
-| **Progress**       | Track their progress over time               |
+| Feature            | Description                                                         | Status      |
+| ------------------ | ------------------------------------------------------------------- | ----------- |
+| **Authentication** | Sign up and log in with JWT tokens                                  | Available   |
+| **Profile**        | The user's goal, body data, equipment, allergies and restrictions   | Planned     |
+| **Targets**        | Daily calories and macros, computed in code                         | Planned     |
+| **Workout plans**  | A weekly plan built from the exercise catalog                       | Planned     |
+| **Diet plans**     | A daily meal plan built from the food catalog                       | Planned     |
+| **Progress**       | Weight and workout logs that feed plan regeneration                 | Planned     |
+
+> FitFlow is a software project, not medical advice.
+
+---
+
+## Design Rules
+
+The LLM is one component inside a pipeline the code controls.
+
+1. **The LLM chooses, the code calculates.** Calorie and macro targets come from plain Python functions (Mifflin-St Jeor plus an activity multiplier) with unit tests. The model never does arithmetic.
+2. **Catalog only.** The model may only use exercises and foods from FitFlow's own catalogs, referenced by ID.
+3. **Structured output.** Model output is parsed into Pydantic models.
+4. **Every plan is validated in code.** IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target. On failure the errors go back to the model, for at most 2 retries.
+5. **One LLM wrapper.** Every model call goes through `app/core/llm.py`, with a timeout, retries, and logging of latency and token usage.
+6. **Safety.** A minimum calorie floor, a cap on weekly weight change, no users under 18, and a "not medical advice" notice in every plan.
 
 ---
 
@@ -62,27 +78,34 @@
 
 ```mermaid
 flowchart LR
-    Client["Client<br/>(Web / Mobile)"] -->|HTTP / JSON + JWT| API["FitFlow API<br/>FastAPI + Uvicorn"]
-    API -->|SQLAlchemy async| DB[("PostgreSQL")]
-    Alembic["Alembic<br/>(migrations)"] -.->|schema| DB
+    Client["Client<br/>(Web / Mobile)"] -->|HTTP + JWT| API
+    subgraph App["FitFlow API (FastAPI)"]
+        API["Routes"] --> Targets["Targets calculator<br/>pure Python"]
+        API --> Wrapper["LLM wrapper"]
+        API --> Validator["Plan validator"]
+    end
+    Wrapper -->|prompt + catalog| LLM["LLM provider"]
+    LLM -->|structured plan| Wrapper
+    API -->|SQLAlchemy async| DB[("PostgreSQL 16")]
 ```
 
 ---
 
 ## Tech Stack
 
-| Category                        | Technology                               |
-| ------------------------------- | ---------------------------------------- |
-| Language & Framework            | Python 3.11+, FastAPI                    |
-| ASGI Server                     | Uvicorn                                  |
-| Database                        | PostgreSQL 16                            |
-| ORM & Driver                    | SQLAlchemy 2.0 (async), asyncpg          |
-| Migrations                      | Alembic                                  |
-| Authentication                  | JWT (PyJWT), Argon2 password hashing     |
-| Data Validation                 | Pydantic, pydantic-settings              |
-| Testing                         | Pytest & HTTPX                           |
-| Documentation                   | OpenAPI (Swagger UI & ReDoc)             |
-| Containers & Orchestration      | Docker, Docker Compose, Kubernetes (k8s) |
+| Category             | Technology                                   |
+| -------------------- | -------------------------------------------- |
+| Language & Framework | Python 3.11+, FastAPI                        |
+| ASGI Server          | Uvicorn                                      |
+| Database             | PostgreSQL 16                                |
+| ORM & Driver         | SQLAlchemy 2.0 (async), asyncpg              |
+| Migrations           | Alembic                                      |
+| Authentication       | JWT (PyJWT), Argon2 password hashing         |
+| Data Validation      | Pydantic, pydantic-settings                  |
+| LLM                  | Provider-agnostic wrapper (provider not chosen yet) |
+| Testing              | Pytest, pytest-asyncio, HTTPX                |
+| Documentation        | OpenAPI (Swagger UI & ReDoc)                 |
+| Local Infrastructure | Docker Compose                               |
 
 ---
 
@@ -94,23 +117,21 @@ flowchart LR
 ```text
 fitflow-api/
 ├── app/
-│   ├── api/              # API endpoints / routes
-│   │   ├── auth.py       #   Sign up, login and session
-│   │   ├── exercises.py  #   Exercise catalog
-│   │   └── workouts.py   #   Workout management
+│   ├── api/
+│   │   ├── auth.py       # Sign up, login, current user
+│   │   └── deps.py       # Shared dependencies (database session, current user)
 │   ├── core/
-│   │   ├── config.py     # Global settings (read from .env)
-│   │   ├── database.py   # SQLAlchemy engine and sessions
+│   │   ├── config.py     # Settings, read from .env
+│   │   ├── database.py   # SQLAlchemy engine, sessions and Base
 │   │   └── security.py   # Password hashing and JWT tokens
 │   ├── models/           # SQLAlchemy models (tables)
-│   ├── schemas/          # Data validation schemas (Pydantic)
-│   ├── main.py           # FastAPI entry point
-│   └── seed.py           # Seeds the initial exercise catalog
+│   ├── schemas/          # Pydantic schemas (requests and responses)
+│   └── main.py           # FastAPI entry point
 ├── alembic/              # Database migrations
-├── tests/                # Automated tests with Pytest
-├── k8s/                  # Kubernetes manifests (Deployment and Service)
-├── Dockerfile            # Application Docker image
-├── docker-compose.yml    # Local services orchestration
+├── tests/                # Automated tests
+├── alembic.ini           # Alembic configuration
+├── docker-compose.yml    # Local PostgreSQL
+├── pytest.ini            # Pytest configuration
 ├── requirements.txt      # Project dependencies
 ├── .env.example          # Environment variables template
 └── .env                  # Environment variables (not committed)
@@ -126,7 +147,7 @@ fitflow-api/
 
 - [Python 3.11+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/)
-- [Docker & Docker Compose](https://docs.docker.com/get-docker/) (to run PostgreSQL), or a local [PostgreSQL 16](https://www.postgresql.org/download/) install
+- [Docker Desktop](https://docs.docker.com/get-docker/), to run PostgreSQL
 
 ### Installation
 
@@ -161,17 +182,11 @@ Then fill in your own values (see [Environment Variables](#environment-variables
 **5. Start the database and run migrations**
 
 ```bash
-docker-compose up -d db
+docker compose up -d db
 alembic upgrade head
 ```
 
-**6. (Optional) Seed the exercise catalog**
-
-```bash
-python -m app.seed
-```
-
-**7. Start the server**
+**6. Start the server**
 
 ```bash
 uvicorn app.main:app --reload
@@ -187,21 +202,32 @@ curl http://127.0.0.1:8000/health
 { "status": "healthy" }
 ```
 
+### Try it
+
+```bash
+# Sign up
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "a-long-password"}'
+
+# Log in and copy the access_token from the response
+curl -X POST http://127.0.0.1:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "a-long-password"}'
+
+# Call a protected route
+curl http://127.0.0.1:8000/auth/me -H "Authorization: Bearer <access_token>"
+```
+
 ---
 
 ## Environment Variables
 
-| Variable                      | Description                               | Example                                                       |
-| ----------------------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| `DATABASE_URL`                | PostgreSQL connection (asyncpg driver)    | `postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow` |
-| `JWT_SECRET`                  | Secret key used to sign JWT tokens        | `a-long-random-string`                                        |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime, in minutes         | `30`                                                          |
-
-```env
-DATABASE_URL=postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow
-JWT_SECRET=a-long-random-string
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
+| Variable                      | Description                            | Example                                                       |
+| ----------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`                | PostgreSQL connection (asyncpg driver) | `postgresql+asyncpg://fitflow:fitflow@localhost:5432/fitflow` |
+| `JWT_SECRET`                  | Secret key used to sign JWT tokens     | `a-long-random-string`                                        |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime, in minutes      | `30`                                                          |
 
 To generate a secure `JWT_SECRET`:
 
@@ -216,15 +242,19 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ## Endpoints
 
-| Method | Route        | Description           | Status                                                                      |
-| :----: | ------------ | --------------------- | --------------------------------------------------------------------------- |
-| `GET`  | `/`          | Welcome message       | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square)  |
-| `GET`  | `/health`    | API health check      | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square)  |
-|   —    | `/auth`      | Sign up, login, session | ![](https://img.shields.io/badge/-in%20progress-orange?style=flat-square) |
-|   —    | `/exercises` | Exercise catalog      | ![](https://img.shields.io/badge/-in%20progress-orange?style=flat-square)   |
-|   —    | `/workouts`  | Workout management    | ![](https://img.shields.io/badge/-in%20progress-orange?style=flat-square)   |
+| Method | Route               | Description                        | Auth | Status                                                                     |
+| :----: | ------------------- | ---------------------------------- | :--: | -------------------------------------------------------------------------- |
+| `GET`  | `/`                 | Welcome message                    | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/health`           | API health check                   | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `POST` | `/auth/register`    | Create an account                  | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `POST` | `/auth/login`       | Get an access token                | No   | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `GET`  | `/auth/me`          | The logged-in user                 | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
+| `PUT`  | `/profile`          | Create or update the profile       | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| `GET`  | `/profile/targets`  | Computed calorie and macro targets | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| `POST` | `/plans/workout`    | Generate a weekly workout plan     | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| `POST` | `/plans/diet`       | Generate a daily meal plan         | Yes  | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
 
-The full, always up-to-date list is in the [interactive docs](#interactive-docs).
+The full list of planned routes is in the [roadmap](ROADMAP.html). The routes available right now are always in the [interactive docs](#interactive-docs).
 
 ---
 
@@ -237,31 +267,16 @@ With the server running, FastAPI generates the documentation automatically:
 | **Swagger UI** | <http://127.0.0.1:8000/docs>  |
 | **ReDoc**      | <http://127.0.0.1:8000/redoc> |
 
----
-
-## Running with Docker
-
-With the `.env` file set up, start the API and PostgreSQL together:
-
-```bash
-docker-compose up --build
-```
-
----
-
-## Deploying to Kubernetes
-
-The manifests (Deployment and Service) live in the `k8s/` folder:
-
-```bash
-kubectl apply -f k8s/
-```
+To call protected routes from Swagger UI, log in, click **Authorize** and paste the `access_token`.
 
 ---
 
 ## Running Tests
 
+The tests need PostgreSQL running. They use a separate `fitflow_test` database, created automatically, so they never touch your development data.
+
 ```bash
+docker compose up -d db
 pytest
 ```
 
@@ -269,17 +284,18 @@ pytest
 
 ## Roadmap
 
-The full plan (how the technologies fit together, the lifecycle of a request, the data model and the planned endpoints) is in **[ROADMAP.html](ROADMAP.html)** (open it in a browser).
+The full plan (design rules, how a plan is generated, the data model and every planned endpoint) is in **[ROADMAP.html](ROADMAP.html)** (open it in a browser).
 
-| Phase | Goal                                          | Status                                                                     |
-| :---: | --------------------------------------------- | -------------------------------------------------------------------------- |
-| 1     | Foundation (settings, PostgreSQL, Alembic)    | ![](https://img.shields.io/badge/-in%20progress-orange?style=flat-square)  |
-| 2     | Authentication (sign up, login, JWT)          | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| 3     | Exercise catalog and seed                     | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| 4     | Workout management (CRUD)                     | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| 5     | Progress and statistics                       | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| 6     | Quality (tests and CI)                        | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
-| 7     | Containers and deployment (Docker, Kubernetes)| ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)     |
+| Phase | Goal                                              | Status                                                                  |
+| :---: | ------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1     | Foundation and auth (settings, database, JWT)     | ![](https://img.shields.io/badge/-done-brightgreen?style=flat-square)   |
+| 2     | User profile                                      | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 3     | Exercise and food catalogs, targets calculator    | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 4     | LLM wrapper and workout plan generation           | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 5     | Diet plan generation                              | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 6     | Evals (pass rate per validation rule)             | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 7     | Progress logging and plan regeneration            | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square)  |
+| 8     | CI, Docker image, Kubernetes manifests, final docs | ![](https://img.shields.io/badge/-planned-lightgrey?style=flat-square) |
 
 ---
 

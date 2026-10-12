@@ -207,6 +207,7 @@
   }
   .m-get { color: var(--get); } .m-post { color: var(--post); }
   .m-patch { color: var(--patch); } .m-delete { color: var(--delete); }
+  .m-put { color: var(--patch); }
   .yes { color: var(--text); } .no { color: var(--muted); }
 
   .errors { margin-top: 14px; }
@@ -225,8 +226,9 @@
   <div class="inner">
     <span class="brand">FitFlow API</span>
     <a class="link" href="#overview">Overview</a>
+    <a class="link" href="#rules">Design rules</a>
     <a class="link" href="#tech">Tech stack</a>
-    <a class="link" href="#lifecycle">Request lifecycle</a>
+    <a class="link" href="#lifecycle">Plan generation</a>
     <a class="link" href="#data">Data model</a>
     <a class="link" href="#phases">Phases</a>
     <a class="link" href="#endpoints">Endpoints</a>
@@ -236,15 +238,15 @@
 <main>
   <header class="hero">
     <span class="eyebrow">Roadmap</span>
-    <h1>How the FitFlow API will be built</h1>
-    <p class="lead">How the project's technologies work together, the path a request takes through the API, the data model and the development phases.</p>
+    <h1>An AI workout and diet plan generator</h1>
+    <p class="lead">A user fills in a profile. FitFlow computes their calorie and macro targets in code, asks an LLM to build a weekly workout plan and a daily meal plan from its own catalogs, validates every plan, and stores it.</p>
 
     <div class="progress-card">
       <div class="progress-head">
-        <strong>Phase 1 of 7 in progress</strong>
-        <span>3 of 38 tasks done</span>
+        <strong>Phase 1 of 8 done</strong>
+        <span>12 of 52 tasks done</span>
       </div>
-      <div class="bar"><div style="width: 8%"></div></div>
+      <div class="bar"><div style="width: 23%"></div></div>
     </div>
 
     <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
@@ -252,18 +254,33 @@
 
   <section id="overview">
     <h2>Overview</h2>
-    <p class="section-lead">The API owns everything: it validates data, authenticates users with JWTs it issues itself, and stores data in PostgreSQL through SQLAlchemy. The database schema evolves through Alembic migrations versioned in the repository.</p>
+    <p class="section-lead">The LLM is one component inside a pipeline the code controls. The code decides the numbers, limits what the model may pick from, and checks the result before anything is saved.</p>
     <div class="card diagram">
 <pre class="mermaid">
 flowchart LR
     Client["Client<br/>(Web / Mobile)"] -->|HTTP + JWT| API
-    subgraph Stack["Docker Compose / Kubernetes"]
-        API["FitFlow API<br/>FastAPI + Uvicorn"]
-        DB[("PostgreSQL 16")]
+    subgraph App["FitFlow API (FastAPI)"]
+        API["Routes"] --> Targets["Targets calculator<br/>pure Python"]
+        API --> Wrapper["LLM wrapper<br/>app/core/llm.py"]
+        API --> Validator["Plan validator"]
     end
-    API -->|"SQLAlchemy async (asyncpg)"| DB
-    Alembic["Alembic<br/>migrations"] -.->|creates and alters tables| DB
+    Wrapper -->|prompt + catalog| LLM["LLM provider"]
+    LLM -->|structured plan| Wrapper
+    API -->|SQLAlchemy async| DB[("PostgreSQL 16")]
 </pre>
+    </div>
+  </section>
+
+  <section id="rules">
+    <h2>Design rules</h2>
+    <p class="section-lead">Six rules the whole project follows. They are what makes the generated plans trustworthy.</p>
+    <div class="tech-grid">
+      <div class="card tech"><h3>1. The LLM chooses, the code calculates</h3><p>Calorie and macro targets come from plain Python functions (Mifflin-St Jeor plus an activity multiplier) with unit tests. The model never does arithmetic.</p></div>
+      <div class="card tech"><h3>2. Catalog only</h3><p>The model may only use exercises and foods from FitFlow's own seeded catalogs, referenced by ID. It cannot invent items.</p></div>
+      <div class="card tech"><h3>3. Structured output</h3><p>Model output is parsed into Pydantic models. Anything that does not match the schema is rejected.</p></div>
+      <div class="card tech"><h3>4. Validate every plan in code</h3><p>IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target. The code may rescale portions; otherwise the errors go back to the model, for at most 2 retries.</p></div>
+      <div class="card tech"><h3>5. One LLM wrapper</h3><p>Every model call goes through <code>app/core/llm.py</code>, with a timeout, retries, and logging of latency and token usage. It is provider-agnostic.</p></div>
+      <div class="card tech"><h3>6. Safety</h3><p>A configurable minimum calorie floor, a cap on weekly weight change, no users under 18, and a "not medical advice" notice in every plan.</p></div>
     </div>
   </section>
 
@@ -271,52 +288,57 @@ flowchart LR
     <h2>What each technology does</h2>
     <p class="section-lead">The role of each piece and where it lives in the code.</p>
     <div class="tech-grid">
-      <div class="card tech"><h3>FastAPI</h3><div class="where mono">app/main.py, app/api/</div><p>Defines the routes, injects dependencies (e.g. the authenticated user) and generates the OpenAPI spec.</p></div>
-      <div class="card tech"><h3>Uvicorn</h3><div class="where mono">Startup / Dockerfile</div><p>ASGI server that runs the application.</p></div>
-      <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Validates incoming data and shapes the responses.</p></div>
-      <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Reads and validates the environment variables from the <code>.env</code> file.</p></div>
-      <div class="card tech"><h3>PostgreSQL</h3><div class="where mono">docker-compose.yml, k8s/</div><p>Stores users, exercises, workouts and history.</p></div>
+      <div class="card tech"><h3>FastAPI</h3><div class="where mono">app/main.py, app/api/</div><p>Defines the routes, injects dependencies (database session, current user, LLM client) and generates the OpenAPI spec.</p></div>
+      <div class="card tech"><h3>Pydantic</h3><div class="where mono">app/schemas/</div><p>Validates request bodies, shapes responses, and parses the LLM's structured output.</p></div>
+      <div class="card tech"><h3>pydantic-settings</h3><div class="where mono">app/core/config.py</div><p>Reads and validates environment variables from <code>.env</code>. The app refuses to start if one is missing.</p></div>
+      <div class="card tech"><h3>PostgreSQL</h3><div class="where mono">docker-compose.yml</div><p>Stores users, profiles, the two catalogs, generated plans and progress logs.</p></div>
       <div class="card tech"><h3>SQLAlchemy 2.0 + asyncpg</h3><div class="where mono">app/core/database.py, app/models/</div><p>Defines tables as Python classes and runs queries asynchronously. Each request gets its own session.</p></div>
       <div class="card tech"><h3>Alembic</h3><div class="where mono">alembic/</div><p>Generates and applies migrations, so the database schema is versioned in Git.</p></div>
       <div class="card tech"><h3>PyJWT + Argon2</h3><div class="where mono">app/core/security.py, app/api/auth.py</div><p>Argon2 hashes passwords; PyJWT signs and validates access tokens.</p></div>
-      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/</div><p>Tests the endpoints against a test PostgreSQL database, without starting a real server.</p></div>
-      <div class="card tech"><h3>Docker / Compose</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>Starts the API and PostgreSQL together with one command, no internet required.</p></div>
-      <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Deployment, scaling and health checks in production.</p></div>
+      <div class="card tech"><h3>Targets calculator</h3><div class="where mono">app/core/targets.py</div><p>Pure functions that turn a profile into calorie and macro targets, with the safety limits applied.</p></div>
+      <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. The provider and model are not chosen yet.</p></div>
+      <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/, tests/evals/</div><p>Regular tests run against a test database with the LLM mocked. Evals call the real model under a separate marker.</p></div>
+      <div class="card tech"><h3>Docker Compose</h3><div class="where mono">docker-compose.yml</div><p>Starts PostgreSQL locally with one command.</p></div>
+      <div class="card tech"><h3>GitHub Actions</h3><div class="where mono">.github/workflows/</div><p>Runs migrations and the regular test suite on every push.</p></div>
     </div>
   </section>
 
   <section id="lifecycle">
-    <h2>Request lifecycle</h2>
-    <p class="section-lead">Example: an authenticated user creates a workout.</p>
+    <h2>How a plan is generated</h2>
+    <p class="section-lead">Example: an authenticated user asks for a diet plan.</p>
     <div class="card diagram">
 <pre class="mermaid">
 sequenceDiagram
     autonumber
     participant C as Client
-    participant R as FastAPI route (workouts.py)
-    participant D as get_current_user
-    participant P as Pydantic
+    participant R as Route (POST /plans/diet)
     participant DB as PostgreSQL
-    C->>R: POST /workouts (Bearer token)
-    R->>D: Resolve user
-    D->>D: Check JWT signature and expiry (PyJWT)
-    D->>DB: SELECT user by token id
-    DB-->>D: User found
-    R->>P: Validate body (WorkoutCreate)
-    P-->>R: Valid data or 422 error
-    R->>DB: INSERT into workouts (user_id = id)
-    DB-->>R: Row created
-    R->>P: Serialize response (WorkoutRead)
-    R-->>C: 201 Created + JSON
+    participant T as Targets calculator
+    participant L as LLM wrapper
+    participant V as Plan validator
+    C->>R: Request a diet plan (Bearer token)
+    R->>DB: Load profile and food catalog
+    R->>T: Compute calorie and macro targets
+    T-->>R: Targets, with safety limits applied
+    loop First attempt plus at most 2 retries
+        R->>L: Profile, targets, allowed foods, previous errors
+        L-->>R: Plan as food IDs and grams
+        R->>V: Validate and rescale portions
+        V-->>R: Valid, or a list of errors
+    end
+    R->>DB: Store the valid plan
+    R-->>C: 201 Created, plan and notice
 </pre>
     </div>
     <div class="card errors table-wrap">
       <table>
-        <thead><tr><th>Step</th><th>Error</th><th class="center">Code</th></tr></thead>
+        <thead><tr><th>Situation</th><th>What happens</th><th class="center">Code</th></tr></thead>
         <tbody>
           <tr><td>Missing or invalid token</td><td>Not authenticated</td><td class="center"><code>401</code></td></tr>
-          <tr><td>Invalid body</td><td>Validation error (Pydantic)</td><td class="center"><code>422</code></td></tr>
-          <tr><td>Another user's resource</td><td>The query filters by <code>user_id</code>, so it is not found</td><td class="center"><code>404</code></td></tr>
+          <tr><td>User has no profile yet</td><td>Asked to complete the profile first</td><td class="center"><code>409</code></td></tr>
+          <tr><td>Calories slightly off target</td><td>The code rescales portions; no retry needed</td><td class="center"><code>201</code></td></tr>
+          <tr><td>Plan uses an allergen or an unknown ID</td><td>Errors are sent back to the model and it tries again</td><td class="center"><code>201</code></td></tr>
+          <tr><td>Still invalid after 2 retries</td><td>A clear error; nothing is stored</td><td class="center"><code>502</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -324,18 +346,40 @@ sequenceDiagram
 
   <section id="data">
     <h2>Data model</h2>
-    <p class="section-lead">In <code>users</code> the password is never stored as plain text, only its Argon2 hash. <code>exercises</code> is a shared catalog filled by <code>app/seed.py</code>. <code>workouts</code> belong to a user: every query filters by <code>user_id</code>, so each user only reads and writes their own records.</p>
+    <p class="section-lead">Plan items are real rows that point at the catalogs, so the database itself rejects an exercise or food that does not exist. Each plan keeps a snapshot of the profile that produced it.</p>
     <div class="card diagram">
 <pre class="mermaid">
 erDiagram
-    USERS ||--o{ WORKOUTS : creates
-    WORKOUTS ||--|{ WORKOUT_EXERCISES : contains
-    EXERCISES ||--o{ WORKOUT_EXERCISES : "used in"
+    USERS ||--o| PROFILES : has
+    USERS ||--o{ WORKOUT_PLANS : owns
+    USERS ||--o{ DIET_PLANS : owns
+    USERS ||--o{ WEIGHT_LOGS : logs
+    USERS ||--o{ WORKOUT_LOGS : logs
+    WORKOUT_PLANS ||--|{ WORKOUT_PLAN_DAYS : contains
+    WORKOUT_PLAN_DAYS ||--|{ WORKOUT_PLAN_EXERCISES : contains
+    EXERCISES ||--o{ WORKOUT_PLAN_EXERCISES : "used in"
+    DIET_PLANS ||--|{ DIET_PLAN_MEALS : contains
+    DIET_PLAN_MEALS ||--|{ DIET_PLAN_MEAL_ITEMS : contains
+    FOODS ||--o{ DIET_PLAN_MEAL_ITEMS : "used in"
+    WORKOUT_PLAN_DAYS ||--o{ WORKOUT_LOGS : "completed as"
     USERS {
         uuid id PK
         string email UK
         string password_hash
         timestamp created_at
+    }
+    PROFILES {
+        uuid user_id PK
+        string goal
+        date birth_date
+        string sex
+        float height_cm
+        float weight_kg
+        string activity_level
+        int training_days_per_week
+        array equipment
+        array allergies
+        array dietary_restrictions
     }
     EXERCISES {
         uuid id PK
@@ -344,20 +388,74 @@ erDiagram
         string equipment
         text description
     }
-    WORKOUTS {
+    FOODS {
+        uuid id PK
+        string name
+        float kcal_per_100g
+        float protein_per_100g
+        float carbs_per_100g
+        float fat_per_100g
+        array allergens
+        array diet_tags
+    }
+    WORKOUT_PLANS {
         uuid id PK
         uuid user_id FK
-        string name
-        date performed_at
-        text notes
+        bool is_active
+        json profile_snapshot
+        string model
+        timestamp created_at
     }
-    WORKOUT_EXERCISES {
+    WORKOUT_PLAN_DAYS {
         uuid id PK
-        uuid workout_id FK
+        uuid plan_id FK
+        int day_index
+        string focus
+    }
+    WORKOUT_PLAN_EXERCISES {
+        uuid id PK
+        uuid day_id FK
         uuid exercise_id FK
+        int position
         int sets
         int reps
+        int rest_seconds
+    }
+    DIET_PLANS {
+        uuid id PK
+        uuid user_id FK
+        int target_kcal
+        int target_protein_g
+        int target_carbs_g
+        int target_fat_g
+        bool is_active
+        json profile_snapshot
+        string model
+        timestamp created_at
+    }
+    DIET_PLAN_MEALS {
+        uuid id PK
+        uuid plan_id FK
+        string meal_type
+        int position
+    }
+    DIET_PLAN_MEAL_ITEMS {
+        uuid id PK
+        uuid meal_id FK
+        uuid food_id FK
+        float grams
+    }
+    WEIGHT_LOGS {
+        uuid id PK
+        uuid user_id FK
         float weight_kg
+        date logged_on
+    }
+    WORKOUT_LOGS {
+        uuid id PK
+        uuid user_id FK
+        uuid plan_day_id FK
+        date completed_on
     }
 </pre>
     </div>
@@ -365,114 +463,138 @@ erDiagram
 
   <section id="phases">
     <h2>Development phases</h2>
-    <p class="section-lead">Each phase ends with a deliverable that works on its own.</p>
+    <p class="section-lead">Each phase ends with a deliverable that works on its own, and includes its own tests.</p>
     <div class="timeline">
 
-      <div class="phase progress">
+      <div class="phase done">
         <div class="num">1</div>
         <div class="card">
-          <div class="phase-head"><h3>Foundation</h3><span class="chip progress">In progress</span></div>
+          <div class="phase-head"><h3>Foundation and auth</h3><span class="chip done">Done</span></div>
           <ul class="tasks">
             <li class="done">Project folder structure</li>
             <li class="done">FastAPI app with <code>/</code> and <code>/health</code></li>
-            <li class="done"><code>app/core/config.py</code> with pydantic-settings (reads <code>DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>ACCESS_TOKEN_EXPIRE_MINUTES</code>)</li>
-            <li><code>db</code> service (PostgreSQL 16) in <code>docker-compose.yml</code></li>
-            <li><code>app/core/database.py</code> with the async engine and a dependency that opens and closes one session per request</li>
-            <li>Alembic initialized and wired to the models in <code>app/models/</code></li>
-            <li>First test: <code>tests/test_health.py</code></li>
+            <li class="done"><code>app/core/config.py</code> with pydantic-settings</li>
+            <li class="done"><code>db</code> service (PostgreSQL 16) in <code>docker-compose.yml</code></li>
+            <li class="done"><code>app/core/database.py</code> with the async engine and one session per request</li>
+            <li class="done">Alembic set up for async, reading the database URL from the app settings</li>
+            <li class="done"><code>users</code> model and migration</li>
+            <li class="done"><code>app/core/security.py</code>: Argon2 password hashing, JWT creation and validation</li>
+            <li class="done"><code>POST /auth/register</code></li>
+            <li class="done"><code>POST /auth/login</code></li>
+            <li class="done"><code>GET /auth/me</code> and the reusable <code>get_current_user</code> dependency</li>
+            <li class="done">Tests for health, security and the auth flow, against a separate test database</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> the API starts, reads its settings, connects to PostgreSQL and runs migrations.</div>
+          <div class="deliverable"><b>Deliverable:</b> a user can sign up, log in and call a protected route.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">2</div>
         <div class="card">
-          <div class="phase-head"><h3>Authentication</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>User profile</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>users</code> model and migration</li>
-            <li><code>app/core/security.py</code>: password hashing and verification (Argon2), JWT creation and validation</li>
-            <li><code>POST /auth/register</code> to create an account</li>
-            <li><code>POST /auth/login</code> returns <code>access_token</code> and <code>refresh_token</code></li>
-            <li><code>POST /auth/refresh</code> to renew the session</li>
-            <li><code>GET /auth/me</code> returns the authenticated user</li>
-            <li>Reusable <code>get_current_user</code> dependency for protected routes</li>
+            <li><code>profiles</code> model and migration, one profile per user</li>
+            <li>Profile schemas with validated ranges and fixed choices (goal, sex, activity level, equipment)</li>
+            <li><code>PUT /profile</code> to create or update the profile</li>
+            <li><code>GET /profile</code></li>
+            <li>Reject users under 18, based on birth date</li>
+            <li>Tests</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> a user can sign up, log in and access protected routes.</div>
+          <div class="deliverable"><b>Deliverable:</b> a logged-in user can save the profile every later phase depends on.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">3</div>
         <div class="card">
-          <div class="phase-head"><h3>Exercise catalog</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Catalogs and targets calculator</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>Exercise</code> model and Alembic migration for the <code>exercises</code> table</li>
-            <li><code>ExerciseRead</code> schema in <code>app/schemas/exercise.py</code></li>
-            <li><code>GET /exercises</code> with <code>muscle_group</code> and <code>equipment</code> filters</li>
-            <li><code>GET /exercises/{id}</code> returns a single exercise</li>
-            <li><code>app/seed.py</code> to fill the initial catalog</li>
+            <li><code>exercises</code> model, migration and seed script</li>
+            <li><code>foods</code> model, migration and seed script (a few hundred foods, per 100 g, with allergens and diet tags)</li>
+            <li><code>GET /exercises</code> and <code>GET /foods</code> with filters</li>
+            <li><code>app/core/targets.py</code>: Mifflin-St Jeor, activity multiplier, goal adjustment and macro split, as pure functions</li>
+            <li>Safety limits: configurable calorie floor and cap on weekly weight change</li>
+            <li><code>GET /profile/targets</code> returns the user's computed targets</li>
+            <li>Unit tests for the calculator</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> an exercise catalog you can query through the API.</div>
+          <div class="deliverable"><b>Deliverable:</b> both catalogs are queryable and every profile has calorie and macro targets, with no LLM involved.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">4</div>
         <div class="card">
-          <div class="phase-head"><h3>Workout management</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>LLM wrapper and workout plans</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Models and migration for the <code>workouts</code> and <code>workout_exercises</code> tables</li>
-            <li><code>WorkoutCreate</code>, <code>WorkoutUpdate</code> and <code>WorkoutRead</code> schemas</li>
-            <li><code>POST /workouts</code> creates a workout with exercises, sets, reps and weight</li>
-            <li><code>GET /workouts</code> lists the user's workouts (paginated)</li>
-            <li><code>GET /workouts/{id}</code> returns a single workout</li>
-            <li><code>PATCH /workouts/{id}</code> to edit</li>
-            <li><code>DELETE /workouts/{id}</code> to delete</li>
+            <li>Choose the LLM provider and model</li>
+            <li><code>app/core/llm.py</code>: timeout, retries, logging of latency and token usage</li>
+            <li>Pydantic schema for the model's workout plan output</li>
+            <li>Validation: exercise IDs exist, equipment matches the profile, day count matches training days</li>
+            <li>Generate, validate and retry loop (at most 2 retries)</li>
+            <li>Workout plan tables and migration</li>
+            <li><code>POST /plans/workout</code>, <code>GET /plans/workout</code> and <code>GET /plans/workout/{id}</code></li>
+            <li>"Not medical advice" notice in plan responses</li>
+            <li>Tests with the LLM mocked</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> full workout CRUD. Every query filters by <code>user_id</code>, and a test ensures a user cannot see another user's workouts.</div>
+          <div class="deliverable"><b>Deliverable:</b> a user gets a stored weekly workout plan that only uses catalog exercises they have the equipment for.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">5</div>
         <div class="card">
-          <div class="phase-head"><h3>Progress</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Diet plans</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>GET /progress/summary</code> with total workouts, weekly volume and most-used exercises</li>
-            <li><code>GET /progress/exercises/{id}</code> with weight progression over time</li>
+            <li>Pydantic schema for the model's diet plan output (food IDs and grams)</li>
+            <li>Validation: food IDs exist, no allergens or restricted foods, calories within 5% of target, protein at or above target</li>
+            <li>Portion rescaling in code before a retry</li>
+            <li>Diet plan tables and migration</li>
+            <li><code>POST /plans/diet</code>, <code>GET /plans/diet</code> and <code>GET /plans/diet/{id}</code></li>
+            <li>Tests with the LLM mocked</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> users can see their progress.</div>
+          <div class="deliverable"><b>Deliverable:</b> a user gets a stored daily meal plan that meets their targets and respects their allergies and restrictions.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">6</div>
         <div class="card">
-          <div class="phase-head"><h3>Quality</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Evals</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li>Tests for every router with Pytest + HTTPX</li>
-            <li>Test PostgreSQL database, cleaned between tests</li>
-            <li>CI (GitHub Actions) with a PostgreSQL service, running migrations and tests on every push and PR</li>
-            <li>Consistent error handling (a single JSON format for errors)</li>
+            <li>About 30 varied test profiles in <code>tests/evals/</code></li>
+            <li>Separate <code>evals</code> pytest marker, excluded from the regular test run</li>
+            <li>Report the pass rate for each validation rule</li>
+            <li>Record the results in the README</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> a green pipeline and coverage of the main flows.</div>
+          <div class="deliverable"><b>Deliverable:</b> measured evidence of how often the real model produces a valid plan, per rule.</div>
         </div>
       </div>
 
       <div class="phase">
         <div class="num">7</div>
         <div class="card">
-          <div class="phase-head"><h3>Containers and deployment</h3><span class="chip planned">Planned</span></div>
+          <div class="phase-head"><h3>Progress and regeneration</h3><span class="chip planned">Planned</span></div>
           <ul class="tasks">
-            <li><code>Dockerfile</code> based on <code>python:3.11-slim</code>, started with Uvicorn</li>
-            <li>Complete <code>docker-compose.yml</code>: API + PostgreSQL with a persistent volume</li>
-            <li>Migrations applied automatically when the container starts</li>
-            <li><code>k8s/deployment.yaml</code> with replicas, a <code>Secret</code> for <code>DATABASE_URL</code> and <code>JWT_SECRET</code>, and probes on <code>/health</code></li>
-            <li><code>k8s/service.yaml</code> to expose the API inside the cluster</li>
-            <li>PostgreSQL in production: a managed database (Neon, RDS) or a StatefulSet in the cluster</li>
+            <li><code>weight_logs</code> and <code>workout_logs</code> models and migration</li>
+            <li><code>POST /progress/weight</code>, <code>POST /progress/workouts</code> and <code>GET /progress</code></li>
+            <li>Regeneration: targets recalculated from the latest weight, recent logs included in the prompt</li>
+            <li>Tests</li>
           </ul>
-          <div class="deliverable"><b>Deliverable:</b> the API runs in Docker and can be deployed to a Kubernetes cluster.</div>
+          <div class="deliverable"><b>Deliverable:</b> plans adapt to what the user actually did.</div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">8</div>
+        <div class="card">
+          <div class="phase-head"><h3>CI, deployment and docs</h3><span class="chip planned">Planned</span></div>
+          <ul class="tasks">
+            <li>GitHub Actions: PostgreSQL service, migrations and the regular tests on every push and PR</li>
+            <li><code>Dockerfile</code> and an API service in <code>docker-compose.yml</code></li>
+            <li>Kubernetes manifests in <code>k8s/</code></li>
+            <li>Final README and roadmap, including the eval results</li>
+          </ul>
+          <div class="deliverable"><b>Deliverable:</b> a green pipeline, a containerised API and documentation that matches the product.</div>
         </div>
       </div>
 
@@ -481,26 +603,30 @@ erDiagram
 
   <section id="endpoints">
     <h2>Planned endpoints</h2>
-    <p class="section-lead">Every planned route, with the phase it will be built in.</p>
+    <p class="section-lead">Every planned route, with the phase it is built in.</p>
     <div class="card table-wrap">
       <table>
         <thead><tr><th>Method</th><th>Route</th><th class="center">Auth required</th><th class="center">Phase</th></tr></thead>
         <tbody>
           <tr><td><span class="method m-get">GET</span></td><td><code>/</code></td><td class="center no">No</td><td class="center">1</td></tr>
           <tr><td><span class="method m-get">GET</span></td><td><code>/health</code></td><td class="center no">No</td><td class="center">1</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">No</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">No</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/refresh</code></td><td class="center no">No</td><td class="center">2</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Yes</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">No</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">No</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Yes</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-put">PUT</span></td><td><code>/profile</code></td><td class="center yes">Yes</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/profile</code></td><td class="center yes">Yes</td><td class="center">2</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/profile/targets</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
           <tr><td><span class="method m-get">GET</span></td><td><code>/exercises</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/exercises/{id}</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
-          <tr><td><span class="method m-post">POST</span></td><td><code>/workouts</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-patch">PATCH</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-delete">DELETE</span></td><td><code>/workouts/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/summary</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
-          <tr><td><span class="method m-get">GET</span></td><td><code>/progress/exercises/{id}</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/foods</code></td><td class="center yes">Yes</td><td class="center">3</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/plans/workout</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/plans/workout</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/plans/workout/{id}</code></td><td class="center yes">Yes</td><td class="center">4</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/plans/diet</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/plans/diet</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/plans/diet/{id}</code></td><td class="center yes">Yes</td><td class="center">5</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/progress/weight</code></td><td class="center yes">Yes</td><td class="center">7</td></tr>
+          <tr><td><span class="method m-post">POST</span></td><td><code>/progress/workouts</code></td><td class="center yes">Yes</td><td class="center">7</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/progress</code></td><td class="center yes">Yes</td><td class="center">7</td></tr>
         </tbody>
       </table>
     </div>

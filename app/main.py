@@ -1,12 +1,21 @@
 from fastapi import FastAPI
 
+from app.api import auth
+
 app = FastAPI(
     title="FitFlow-API",
-    description="FitFlow is a fitness tracking application that allows users to monitor their workouts, nutrition, and overall health. The API provides endpoints for managing user profiles, logging exercises, tracking nutrition intake, and generating progress reports.",
+    description=(
+        "FitFlow generates personalised weekly workout plans and daily meal "
+        "plans from a user's profile. Calorie and macro targets are computed "
+        "in code; an LLM picks exercises and foods from FitFlow's own catalogs, "
+        "and every plan is validated before it is stored."
+    ),
     version="1.0.0",
     docs_url="/docs",  # SWAGGER UI
     redoc_url="/redoc",  # REDOC UI
 )
+
+app.include_router(auth.router)
 
 
 @app.get("/", tags=["Root"])
