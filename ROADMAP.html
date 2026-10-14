@@ -249,7 +249,7 @@
       <div class="bar"><div style="width: 100%"></div></div>
     </div>
 
-    <div class="note">This is a living plan: routes, tables and phases may change as the project evolves.</div>
+    <div class="note">Everything on this page is built. It started as the plan; where the build changed something, the page now describes what exists.</div>
   </header>
 
   <section id="overview">
@@ -276,11 +276,11 @@ flowchart LR
     <p class="section-lead">Six rules the whole project follows. They are what makes the generated plans trustworthy.</p>
     <div class="tech-grid">
       <div class="card tech"><h3>1. The LLM chooses, the code calculates</h3><p>Calorie and macro targets come from plain Python functions (Mifflin-St Jeor plus an activity multiplier) with unit tests. The model never does arithmetic.</p></div>
-      <div class="card tech"><h3>2. Catalog only</h3><p>The model may only use exercises and foods from FitFlow's own seeded catalogs, referenced by ID. It cannot invent items.</p></div>
+      <div class="card tech"><h3>2. Catalog only</h3><p>The model may only use exercises and foods from FitFlow's own seeded catalogs, referenced by ID. It is only shown items the user can use, and the JSON schema only allows those IDs, so it cannot invent items.</p></div>
       <div class="card tech"><h3>3. Structured output</h3><p>Model output is parsed into Pydantic models. Anything that does not match the schema is rejected.</p></div>
-      <div class="card tech"><h3>4. Validate every plan in code</h3><p>IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target. The code repairs what it can (portions and protein); otherwise the errors go back to the model, for at most 2 retries.</p></div>
-      <div class="card tech"><h3>5. One LLM wrapper</h3><p>Every model call goes through <code>app/core/llm.py</code>, with a timeout, retries, and logging of latency and token usage. It is provider-agnostic.</p></div>
-      <div class="card tech"><h3>6. Safety</h3><p>A configurable minimum calorie floor, a cap on weekly weight change, no users under 18, and a "not medical advice" notice in every plan.</p></div>
+      <div class="card tech"><h3>4. Validate every plan in code</h3><p>IDs exist, exercises match the user's equipment, no allergens or restricted foods, calories within 5% of target, protein at or above target, every portion within its food's limit. The code repairs what it can (calories, protein and portion sizes); only the rest goes back to the model, for at most 2 retries.</p></div>
+      <div class="card tech"><h3>5. One LLM wrapper</h3><p>Every model call goes through <code>app/core/llm.py</code>, with a timeout, retries, and logging of latency, token usage and tool calls. It is provider-agnostic: a local Ollama model by default, or hosted Claude.</p></div>
+      <div class="card tech"><h3>6. Safety</h3><p>A configurable minimum calorie floor, a cap on weekly weight change, protein capped at 35% of calories, no users under 18, and a "not medical advice" notice in every plan. A calorie target chosen by the user must pass the same limits.</p></div>
     </div>
   </section>
 
@@ -298,8 +298,10 @@ flowchart LR
       <div class="card tech"><h3>Targets calculator</h3><div class="where mono">app/core/targets.py</div><p>Pure functions that turn a profile into calorie and macro targets, with the safety limits applied.</p></div>
       <div class="card tech"><h3>LLM wrapper</h3><div class="where mono">app/core/llm.py</div><p>The single entry point for model calls. It talks to a local model served by Ollama (<code>qwen2.5:7b</code> by default) or to hosted Claude through the Anthropic SDK; the provider and model are settings.</p></div>
       <div class="card tech"><h3>Pytest + HTTPX</h3><div class="where mono">tests/, tests/evals/</div><p>Regular tests run against a test database with the LLM mocked. Evals call the real model under a separate marker.</p></div>
-      <div class="card tech"><h3>Docker Compose</h3><div class="where mono">docker-compose.yml</div><p>Starts PostgreSQL locally with one command.</p></div>
-      <div class="card tech"><h3>GitHub Actions</h3><div class="where mono">.github/workflows/</div><p>Runs migrations and the regular test suite on every push.</p></div>
+      <div class="card tech"><h3>Ollama</h3><div class="where mono">runs on the host</div><p>Serves the local model, <code>qwen2.5:7b</code>, on the GPU. Free, and the default provider.</p></div>
+      <div class="card tech"><h3>Docker</h3><div class="where mono">Dockerfile, docker-compose.yml</div><p>The API as an image. Compose starts PostgreSQL alone for development, or the database, a one-off migration step and the API together.</p></div>
+      <div class="card tech"><h3>Kubernetes</h3><div class="where mono">k8s/</div><p>Manifests for PostgreSQL, a migration Job and two API pods with readiness and liveness probes. Schema-validated; not run on a cluster.</p></div>
+      <div class="card tech"><h3>GitHub Actions</h3><div class="where mono">.github/workflows/</div><p>On every push and pull request: migrations, a check that models and migrations agree, the regular tests, and an image build.</p></div>
     </div>
   </section>
 
@@ -317,13 +319,13 @@ sequenceDiagram
     participant L as LLM wrapper
     participant V as Plan validator
     C->>R: Request a diet plan (Bearer token)
-    R->>DB: Load profile and food catalog
+    R->>DB: Load profile, food catalog and recent progress logs
     R->>T: Compute calorie and macro targets
     T-->>R: Targets, with safety limits applied
     loop First attempt plus at most 2 retries
-        R->>L: Profile, targets, allowed foods, previous errors
+        R->>L: Profile, targets, progress, allowed foods, previous errors
         L-->>R: Plan as food IDs and grams
-        R->>V: Validate and rescale portions
+        R->>V: Check the foods, then scale meals, repair protein and cap portions
         V-->>R: Valid, or a list of errors
     end
     R->>DB: Store the valid plan
@@ -336,9 +338,12 @@ sequenceDiagram
         <tbody>
           <tr><td>Missing or invalid token</td><td>Not authenticated</td><td class="center"><code>401</code></td></tr>
           <tr><td>User has no profile yet</td><td>Asked to complete the profile first</td><td class="center"><code>409</code></td></tr>
-          <tr><td>Calories slightly off target</td><td>The code rescales portions; no retry needed</td><td class="center"><code>201</code></td></tr>
-          <tr><td>Plan uses an allergen or an unknown ID</td><td>Errors are sent back to the model and it tries again</td><td class="center"><code>201</code></td></tr>
+          <tr><td>Calorie target chosen by the user is outside the safety limits</td><td>Refused before the model is called, with the allowed range</td><td class="center"><code>422</code></td></tr>
+          <tr><td>Calories off target</td><td>The code scales each meal to its share of the day; no retry needed</td><td class="center"><code>201</code></td></tr>
+          <tr><td>Protein short, or a portion too large</td><td>The code moves calories to the protein foods and caps the portion; no retry needed</td><td class="center"><code>201</code></td></tr>
+          <tr><td>Plan uses an unknown ID, or protein is still short after repair</td><td>Errors are sent back to the model and it tries again</td><td class="center"><code>201</code></td></tr>
           <tr><td>Still invalid after 2 retries</td><td>A clear error; nothing is stored</td><td class="center"><code>502</code></td></tr>
+          <tr><td>The model cannot be reached</td><td>Retried, then a clear error; nothing is stored</td><td class="center"><code>503</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -395,6 +400,7 @@ erDiagram
         float protein_per_100g
         float carbs_per_100g
         float fat_per_100g
+        float max_portion_g
         array allergens
         array diet_tags
     }
@@ -457,6 +463,11 @@ erDiagram
         uuid user_id FK
         uuid plan_day_id FK
         date completed_on
+    }
+    LOGIN_ATTEMPTS {
+        uuid id PK
+        string email
+        timestamp attempted_at
     }
 </pre>
     </div>
@@ -612,14 +623,15 @@ erDiagram
   </section>
 
   <section id="endpoints">
-    <h2>Planned endpoints</h2>
-    <p class="section-lead">Every planned route, with the phase it is built in.</p>
+    <h2>Endpoints</h2>
+    <p class="section-lead">Every route, with the phase it was built in.</p>
     <div class="card table-wrap">
       <table>
         <thead><tr><th>Method</th><th>Route</th><th class="center">Auth required</th><th class="center">Phase</th></tr></thead>
         <tbody>
           <tr><td><span class="method m-get">GET</span></td><td><code>/</code></td><td class="center no">No</td><td class="center">1</td></tr>
           <tr><td><span class="method m-get">GET</span></td><td><code>/health</code></td><td class="center no">No</td><td class="center">1</td></tr>
+          <tr><td><span class="method m-get">GET</span></td><td><code>/health/ready</code></td><td class="center no">No</td><td class="center">8</td></tr>
           <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="center no">No</td><td class="center">1</td></tr>
           <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="center no">No</td><td class="center">1</td></tr>
           <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="center yes">Yes</td><td class="center">1</td></tr>

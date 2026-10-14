@@ -439,7 +439,7 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 | `POST` | `/progress/workouts` | Log a completed workout day       | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 | `GET`  | `/progress`         | Your logs and a summary            | Yes  | ![](https://img.shields.io/badge/-available-brightgreen?style=flat-square) |
 
-The full list of planned routes is in the [roadmap](ROADMAP.html). The routes available right now are always in the [interactive docs](#interactive-docs).
+The same list, with the phase each route was built in, is in the [roadmap](ROADMAP.html). The [interactive docs](#interactive-docs) always show the routes of the running code.
 
 ---
 
@@ -543,7 +543,7 @@ One run each is a small sample: results move by a plan or two between runs, so t
 
 ## Roadmap
 
-The full plan (design rules, how a plan is generated, the data model and every planned endpoint) is in **[ROADMAP.html](ROADMAP.html)** (open it in a browser).
+The full picture (design rules, how a plan is generated, the data model, every phase and every endpoint) is in **[ROADMAP.html](ROADMAP.html)** (open it in a browser).
 
 | Phase | Goal                                              | Status                                                                  |
 | :---: | ------------------------------------------------- | ----------------------------------------------------------------------- |
